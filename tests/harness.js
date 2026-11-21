@@ -35,7 +35,7 @@ function createHarness(opts) {
       Navidrome: { visible: false, rect: null, calls: [] },
       Lyrics: { visible: false, rect: null, calls: [] }
     },
-    playlists: [
+    playlists: opts.playlists ? opts.playlists.map(p => ({ name: p.name, items: (p.items || []).slice(), locked: !!p.locked, auto: !!p.auto })) : [
       { name: 'Local Mix', items: [], locked: false, auto: false }
     ],
     activePlaylist: 0,
@@ -50,7 +50,12 @@ function createHarness(opts) {
     playbackLength: 0,
     seekTo: null,
     volumeDb: -10,
-    darkUi: true,
+    darkUi: opts.darkUi !== undefined ? opts.darkUi : true,
+    localeName: opts.localeName !== undefined ? opts.localeName : 'en-US',
+    navidromeInstalled: opts.navidromeInstalled !== false,
+    navidromeConfigured: opts.navidromeConfigured !== false,
+    preferencesCalls: 0,
+    openedUrls: [],
     repaintCount: 0,
     repaintFullCount: 0,
     repaintRectCalls: [],
@@ -67,10 +72,13 @@ function createHarness(opts) {
       'Segoe MDL2 Assets'
     ]),
     cuiFontName: 'Segoe UI',
-    libraryItems: []
+    libraryItems: opts.libraryItems ? opts.libraryItems.slice() : [],
+    tagWrites: [],
+    failTagWrites: opts.failTagWrites || false
   };
 
   function makeHandle(p, meta) {
+    const rawMeta = meta || {};
     const m = Object.assign({
       title: path.basename(String(p || '')),
       artist: 'Local Artist',
@@ -79,17 +87,46 @@ function createHarness(opts) {
       tracknumber: '',
       year: '',
       length: '3:20',
-      lengthSec: 200
-    }, meta || {});
+      lengthSec: 200,
+      added: '',
+      lastModified: '',
+      playCount: '',
+      lastPlayed: '',
+      loved: '',
+      replaygainTrackGain: ''
+    }, rawMeta);
+    m._custom = Object.assign({}, rawMeta._custom || {});
+    if (rawMeta.LOVED !== undefined && m.loved === '') m.loved = rawMeta.LOVED;
     return {
       Path: p,
       RawPath: p,
-      SubSong: 0,
+      SubSong: rawMeta.SubSong || 0,
       Length: m.lengthSec,
       FileSize: 1024,
+      _readOnly: !!rawMeta.readOnly,
       _meta: m,
-      Compare(other) { return other && this.Path === other.Path; }
+      Compare(other) { return other && this.Path === other.Path && (this.SubSong || 0) === (other.SubSong || 0); }
     };
+  }
+
+  function applyTagPatch(h, patch) {
+    if (!h || !patch || typeof patch !== 'object') return;
+    if (!h._meta) h._meta = {};
+    if (!h._meta._custom) h._meta._custom = {};
+    for (const k of Object.keys(patch)) {
+      const v = patch[k];
+      const str = (v === '' || (Array.isArray(v) && v.length === 0))
+        ? ''
+        : (v === null ? 'null' : String(v));
+      const upper = k.toUpperCase();
+      if (str === '') delete h._meta._custom[upper];
+      else h._meta._custom[upper] = str;
+      if (upper === 'LOVED') h._meta.loved = str;
+      else if (upper === 'TITLE') h._meta.title = str;
+      else if (upper === 'ARTIST') h._meta.artist = str;
+      else if (upper === 'ALBUM') h._meta.album = str;
+      else if (upper === 'ALBUM ARTIST') h._meta.albumArtist = str;
+    }
   }
 
   function makeHandleList(arr) {
@@ -106,6 +143,19 @@ function createHarness(opts) {
       Clone() { return makeHandleList(list); },
       GetLibraryRelativePath() { return ''; },
       MakeDifference() {},
+      Dispose() {},
+      UpdateFileInfoFromJSON(jsonStr) {
+        if (state.failTagWrites === 'throw') throw new Error('Mock read-only file');
+        const parsed = JSON.parse(String(jsonStr || '{}'));
+        for (let i = 0; i < list.length; i++) {
+          const h = list[i];
+          const patch = Array.isArray(parsed) ? parsed[i] : parsed;
+          if (!patch || typeof patch !== 'object') continue;
+          const ro = !!(h._readOnly || state.failTagWrites);
+          state.tagWrites.push({ path: h.Path, patch: Object.assign({}, patch), readOnly: ro });
+          if (!ro) applyTagPatch(h, patch);
+        }
+      },
       get Count() { return list.length; },
       get _items() { return list; }
     };
@@ -236,9 +286,55 @@ function createHarness(opts) {
     DisableWindowSizing: false,
     DisableWindowMaximizing: false,
     WindowState: 0,
-    SetCaptionAreaSize() {},
+    DisplayResolution: '2560x1600',
+    WindowMinWidth: 0,
+    WindowMinHeight: 0,
+    captionCalls: [],
+    sizeLimitsCalls: [],
+    posCalls: [],
+    sizeCalls: [],
+    SetCaptionAreaSize(x, y, w, h) { this.captionCalls.push({ x, y, w, h }); },
+    SetWindowSizeLimits(minW, minH, maxW, maxH) {
+      this.sizeLimitsCalls.push({ minW, minH, maxW, maxH });
+    },
+    SetWindowPosition(x, y) { this.posCalls.push({ x, y }); },
+    SetWindowSize(w, h) { this.sizeCalls.push({ w, h }); },
+    ExitMaximize() { this.WindowState = 0; },
     ToggleMaximize() { this.WindowState = (this.WindowState === 1) ? 0 : 1; },
     WindowMinimize() {}
+  };
+
+  const verdantChromeMock = {
+    attached: false,
+    attachCalls: 0,
+    WindowState: 0,
+    MaxButtonHot: false,
+    metricsCalls: [],
+    fullscreenCalls: [],
+    themeCalls: [],
+    detachCalls: 0,
+    exitDetachCalls: 0,
+    Attach() {
+      this.attachCalls++;
+      if (opts.verdantChromeAttachFails) {
+        this.attached = false;
+        return false;
+      }
+      this.attached = true;
+      return true;
+    },
+    Detach() { this.attached = false; this.detachCalls++; },
+    DetachForExit() { this.exitDetachCalls++; },
+    SetChromeMetrics(cx, cy, cw, ch, mx, my, mw, mh, minW, minH) {
+      this.metricsCalls.push({ cx, cy, cw, ch, mx, my, mw, mh, minW, minH });
+    },
+    SetFullscreen(v) { this.fullscreenCalls.push(v); },
+    SetTheme(isDark, canvasRef, borderRef) {
+      this.themeCalls.push({ isDark, canvasRef, borderRef });
+    },
+    ToggleMaximize() { this.WindowState = (this.WindowState === 1) ? 0 : 1; },
+    WindowMinimize() {},
+    ExitMaximize() { this.WindowState = 0; }
   };
 
   let ctx = null;
@@ -332,11 +428,58 @@ function createHarness(opts) {
           EvalWithMetadb(h) {
             if (!h) return '';
             const m = h._meta || {};
-            if (expr.indexOf('title') >= 0) return m.title || h.Path;
-            if (expr.indexOf('artist') >= 0) return m.artist || 'Unknown';
-            if (expr.indexOf('album') >= 0) return m.album || 'Album';
-            if (expr.indexOf('length') >= 0) return m.length || '3:00';
-            if (expr.indexOf('path') >= 0) return h.Path;
+            const e = String(expr || '');
+            if (e === '%album artist% - %album%') {
+              const aa = m.albumArtist || m.artist || '';
+              const al = m.album || '';
+              return (aa || '?') + ' - ' + (al || '?');
+            }
+            if (e === '%album artist%') return m.albumArtist || m.artist || '?';
+            if (e === '$year(%date%)') {
+              const d = String(m.date || m.year || '');
+              const ym = /(\d{4})/.exec(d);
+              return ym ? ym[1] : '';
+            }
+            if (e === '%length_seconds%') return String(m.lengthSec !== undefined ? m.lengthSec : (h.Length || 0));
+            if (e === '%tracknumber%') return String(m.tracknumber !== undefined && m.tracknumber !== '' ? m.tracknumber : '');
+            if (e === '$if2([%added%],[%last_modified%])') {
+              return String(m.added || m.lastModified || m.last_modified || '');
+            }
+            if (e === '[%play_count%]') {
+              const pc = m.playCount !== undefined && m.playCount !== '' ? m.playCount : m.play_count;
+              return pc !== undefined && pc !== '' ? String(pc) : '';
+            }
+            if (e === '[%last_played%]') return String(m.lastPlayed || m.last_played || '');
+            if (e === '$if(%replaygain_track_gain%,1,0)') return m.replaygainTrackGain ? '1' : '0';
+            const brMatch = /^\[%([A-Za-z0-9_ ]+)%\]$/.exec(e);
+            if (brMatch) {
+              const key = brMatch[1];
+              const upper = key.toUpperCase();
+              if (m._custom && m._custom[upper] !== undefined) return String(m._custom[upper]);
+              if (upper === 'LOVED') return String(m.loved || '');
+              if (upper === 'ARTIST') return m.artist || 'Unknown';
+              if (upper === 'ALBUM') return m.album || 'Album';
+              if (upper === 'TITLE') return m.title || h.Path;
+              return m[key] !== undefined ? String(m[key]) : '';
+            }
+            const unbrMatch = /^%([A-Za-z0-9_ ]+)%$/.exec(e);
+            if (unbrMatch) {
+              const key = unbrMatch[1];
+              const upper = key.toUpperCase();
+              if (upper === 'TITLE') return m.title || h.Path;
+              if (upper === 'ARTIST') return m.artist || '?';
+              if (upper === 'ALBUM') return m.album || '?';
+              if (upper === 'LENGTH') return m.length || '3:00';
+              if (upper === 'PATH') return h.Path;
+              if (m._custom && m._custom[upper] !== undefined) return String(m._custom[upper]);
+              if (upper === 'LOVED') return m.loved ? String(m.loved) : '?';
+              return m[key] !== undefined && m[key] !== '' ? String(m[key]) : '?';
+            }
+            if (e.indexOf('title') >= 0) return m.title || h.Path;
+            if (e.indexOf('artist') >= 0) return m.artist || 'Unknown';
+            if (e.indexOf('album') >= 0) return m.album || 'Album';
+            if (e.indexOf('length') >= 0) return m.length || '3:00';
+            if (e.indexOf('path') >= 0) return h.Path;
             return '';
           },
           EvalWithMetadbs(hl) {
@@ -351,7 +494,8 @@ function createHarness(opts) {
       Stop() { state.isPlaying = false; state.isPaused = false; },
       Next() {},
       Prev() {},
-      Exit() {},
+      Exit() { state.exitCalls=(state.exitCalls||0)+1; },
+      ShowPreferences() { state.preferencesCalls++; },
       AddLocationsAsync(urls) {
         const tid = state.nextAddTaskId++;
         state.addTasks.push({ tid, urls: Array.from(urls || []) });
@@ -386,15 +530,39 @@ function createHarness(opts) {
         return idx;
       },
       RenamePlaylist(i, name) { if (state.playlists[i]) state.playlists[i].name = name; },
-      RemovePlaylist(i) { state.playlists.splice(i, 1); },
+      RemovePlaylist(i) {
+        state.playlists.splice(i, 1);
+        if (state.activePlaylist >= state.playlists.length) state.activePlaylist = Math.max(-1, state.playlists.length - 1);
+      },
       ClearPlaylist(i) { if (state.playlists[i]) state.playlists[i].items = []; },
       InsertPlaylistItems(i, pos, hl) {
         if (!state.playlists[i]) return;
         for (let k = 0; k < hl.Count; k++) state.playlists[i].items.splice(pos + k, 0, hl[k]);
       },
-      RemovePlaylistSelection() {},
-      SetPlaylistSelectionSingle() {},
-      ClearPlaylistSelection() {},
+      RemovePlaylistSelection(i, crop) {
+        const pl = state.playlists[i];
+        if (!pl || !pl.sel) return;
+        const keep = [];
+        for (let k = 0; k < pl.items.length; k++) {
+          const selected = !!pl.sel[k];
+          if (crop ? selected : !selected) keep.push(pl.items[k]);
+        }
+        pl.items = keep;
+        pl.sel = {};
+      },
+      SetPlaylistSelectionSingle(i, itemIdx, selState) {
+        const pl = state.playlists[i];
+        if (!pl) return;
+        if (!pl.sel) pl.sel = {};
+        if (selState) pl.sel[itemIdx] = true;
+        else delete pl.sel[itemIdx];
+      },
+      ClearPlaylistSelection(i) {
+        if (state.playlists[i]) state.playlists[i].sel = {};
+      },
+      GetPlaylistLockedActions(i) {
+        return (state.playlists[i] && state.playlists[i].locked) ? 'RemoveItems' : '';
+      },
       UndoBackup() {},
       ExecutePlaylistDefaultAction(plIdx, itemIdx) {
         state.playingPlaylist = plIdx;
@@ -439,7 +607,7 @@ function createHarness(opts) {
           Close() {},
           Query(sql, params) {
             const k = params && params[0];
-            return Object.prototype.hasOwnProperty.call(cfg, k) ? [{ value: cfg[k] }] : [];
+            return state.navidromeConfigured && Object.prototype.hasOwnProperty.call(cfg, k) ? [{ value: cfg[k] }] : [];
           }
         };
       },
@@ -468,6 +636,7 @@ function createHarness(opts) {
       },
       ShowHtmlDialog() {},
       InputBox() { return ''; },
+      CheckComponent(name) { return name === 'foo_navidrome' && state.navidromeInstalled; },
       CheckFont(name) { return state.installedFonts.has(String(name || '')); }
     },
     gdi: {
@@ -499,7 +668,11 @@ function createHarness(opts) {
               StdErr: { ReadAll() { return ''; } }
             };
           },
-          Run() { return 0; }
+          Run() { return 0; },
+          RegRead(key) {
+            if (state.localeName === null) throw new Error('Registry key not found: ' + key);
+            return String(state.localeName);
+          }
         };
       }
       if (progId === 'Scripting.FileSystemObject') {
@@ -509,8 +682,14 @@ function createHarness(opts) {
           FileExists(p) { return fs.existsSync(p); }
         };
       }
+      if (progId === 'Shell.Application') {
+        return { ShellExecute(url) { state.openedUrls.push(url); } };
+      }
       if (progId === 'UIWizard') {
         return uiWizardMock;
+      }
+      if (progId === 'Verdant.Chrome' && opts.verdantChrome) {
+        return verdantChromeMock;
       }
       throw new Error('Unsupported ActiveXObject: ' + progId);
     },
@@ -534,6 +713,19 @@ function createHarness(opts) {
     return req;
   }
 
+  function flushTimers(filterMs) {
+    const entries = Array.from(state.timers.entries());
+    let ran = 0;
+    for (const [id, t] of entries) {
+      if (filterMs !== undefined && t.ms !== filterMs) continue;
+      if (!state.timers.has(id)) continue;
+      if (!t.interval) state.timers.delete(id);
+      t.fn();
+      ran++;
+    }
+    return ran;
+  }
+
   return {
     VERDANT_DIR,
     MOCK_PROFILE,
@@ -541,11 +733,13 @@ function createHarness(opts) {
     sandbox,
     ctx,
     uiWizardMock,
+    verdantChromeMock,
     makeHandle,
     makeHandleList,
     makeImage,
     makeGraphics,
-    flushOneHttp
+    flushOneHttp,
+    flushTimers
   };
 }
 

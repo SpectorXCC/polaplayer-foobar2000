@@ -65,20 +65,19 @@ function rgConfirmScan(){
 /* Scanning WRITES ReplayGain tags into the user's audio files, so it is confirmed rather than run
    off a single click -- and the copy says so plainly. Height follows the wrapped body so the text
    can never overrun the panel at a different UISCALE. */
-var RG_BODY='foobar2000 will scan them and write ReplayGain tags into the files, then play every '+
-            'track at the same loudness. Its own progress window runs the scan, and nothing is deleted.';
 function drawRgPrompt(gr){
-  var cw=Math.min(470,W-40), pw=cw-56, lh=24;
-  var nl=Math.max(1,gr.EstimateLineWrap(RG_BODY,FONT.pl,pw).length/2);
+  var cw=Math.min(470,W-40), pw=cw-56, lh=24, body=T('dlg.rg_body');
+  var nl=Math.max(1,gr.EstimateLineWrap(body,FONT.pl,pw).length/2);
   var ch=138+nl*lh+PILL_H;
   var cy=Math.max(10,Math.round((H-ch)/2)), cx=modalPanel(gr,cw,ch,cy);
   var px=cx+28, y=cy+26;
-  tL(gr,'Normalize volume?',FONT.sect,COL.text,px,y,pw,26); y+=38;
-  tL(gr,fmtNum(rgPrompt.n)+' of '+fmtNum(rgPrompt.total)+' tracks still need a loudness scan.',FONT.pl,COL.text2,px,y,pw,22); y+=32;
-  tPara(gr,RG_BODY,FONT.pl,COL.text2,px,y,pw,lh);
-  var w2=pillW(gr,'Scan & normalize'), w1=pillW(gr,'Cancel'), gap=12;
+  tL(gr,T('dlg.rg_title'),FONT.sect,COL.text,px,y,pw,26); y+=38;
+  tL(gr,T('dlg.rg_need',fmtNum(rgPrompt.n),fmtNum(rgPrompt.total)),FONT.pl,COL.text2,px,y,pw,22); y+=32;
+  tPara(gr,body,FONT.pl,COL.text2,px,y,pw,lh);
+  var scanLbl=T('btn.scan_normalize'), cancelLbl=T('btn.cancel');
+  var w2=pillW(gr,scanLbl), w1=pillW(gr,cancelLbl), gap=12;
   var by=cy+ch-22-PILL_H, x2=cx+cw-28-w2, x1=x2-gap-w1;
-  RG_HB={ cancel:drawPill(gr,x1,by,w1,'Cancel',false), scan:drawPill(gr,x2,by,w2,'Scan & normalize',true) };
+  RG_HB={ cancel:drawPill(gr,x1,by,w1,cancelLbl,false), scan:drawPill(gr,x2,by,w2,scanLbl,true) };
 }
 
 /* Normalize-volume pill: the same capsule as the group-by dropdown, but a state toggle rather than
@@ -90,6 +89,6 @@ function drawNormalizePill(gr,x,y,w,h){
   if(!on) strokeRound(gr,x,y,w,h,h/2,1,hot?COL.text2:COL.line);
   var col=on?COL.black:COL.text;
   drawIcon(gr,'equalizer',col,x+14,y+(h-20)/2,20,20,18);
-  tL(gr,'Normalize volume',FONT.pl,col,x+42,y,w-56,h);
+  tL(gr,T('btn.normalize'),FONT.pl,col,x+42,y,w-56,h);
   return {x0:x,y0:y,x1:x+w,y1:y+h};
 }

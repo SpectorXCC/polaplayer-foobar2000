@@ -163,12 +163,15 @@ function skelRows(gr,x,y,w,h,rowH){
 }
 // header block (cover + title/meta bars) shared by the playlist and All Songs skeletons
 function drawViewSkeleton(gr,r){
-  var lx=r.x+M.cpad, w=r.w-M.cpad*2, ay=r.y+44, art=M.artSz;
+  var compact=M.headH<220;
+  var lx=r.x+M.cpad, w=Math.max(40,r.w-M.cpad*2), ay=r.y+(compact?16:44);
+  var art=Math.min(M.artSz,Math.max(48,Math.floor(r.w*0.22)));
   gr.FillRoundRect(lx,ay,art,art,8,8,COL.elev);
-  var tx=lx+art+24, tw=Math.max(120,w-art-24);
-  gr.FillRoundRect(tx,ay+34,Math.min(tw,420),44,6,6,COL.elev);
-  gr.FillRoundRect(tx,ay+94,Math.min(tw,260),18,4,4,COL.skel2);
+  var tx=lx+art+18, tw=Math.max(40,w-art-18);
+  var tbarH=compact?24:44;
+  gr.FillRoundRect(tx,ay+(compact?10:34),Math.min(tw,420),tbarH,6,6,COL.elev);
+  gr.FillRoundRect(tx,ay+(compact?42:94),Math.min(tw,260),16,4,4,COL.skel2);
   var rowsTop=r.y+M.headH, cropY=r.y+r.h;
   if(cropY>rowsTop) skelRows(gr,lx,rowsTop,w,cropY-rowsTop,M.rowH);
-  shimmer(gr,lx,ay,w,cropY-ay);   // one sweep for the whole view keeps header and rows in phase
+  shimmer(gr,lx,ay,w,Math.max(0,cropY-ay));   // one sweep for the whole view keeps header and rows in phase
 }

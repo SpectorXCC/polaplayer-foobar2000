@@ -2,34 +2,36 @@
    Part of Verdant, a Spotify-style theme for foobar2000. Loaded by main.js;
    every module shares one global scope, so load order is set there. */
 
-function openPlaylistMenu(pl,x,y){
-  var items=[];
-  if(!plman.IsPlaylistLocked(pl)) items.push({label:'Add files...',act:'addfiles'},{label:'Add folder...',act:'addfolder'});
-  items.push({label:'Rename',act:'rename'},{label:'Delete',act:'delete',danger:true});
-  ctxMenu={kind:'pl', pl:pl, name:plman.GetPlaylistName(pl), x:x, y:y, items:items};
-  repaintAll();
-}
-
 function openNvPlaylistMenu(plObj,x,y){
   if(!plObj) return false;
   var items=[
-    {label:'\u64ad\u653e\u6b4c\u5355',act:'nv-pl-play',accent:true},
-    {label:'\u968f\u673a\u64ad\u653e\u6b4c\u5355',act:'nv-pl-shuf'},
-    {sep:true},
-    {label:'\u91cd\u547d\u540d',act:'nv-pl-rename'},
-    {label:'\u5220\u9664\u6b4c\u5355',act:'nv-pl-delete',danger:true}
+    {label:T('menu.pl_play'),act:'nv-pl-play',accent:true},
+    {label:T('menu.pl_shuf'),act:'nv-pl-shuf'}
   ];
+  if(plObj.editable !== false){
+    items.push({sep:true});
+    items.push({label:T('menu.rename'),act:'nv-pl-rename'});
+  } else {
+    items.push({sep:true});
+  }
+  items.push({label:T('menu.delete'),act:'nv-pl-delete',danger:true});
   ctxMenu={kind:'nv-pl', plId:plObj.id, plObj:plObj, name:plObj.name, x:x, y:y, items:items};
   repaintAll(); return true;
 }
 
 function openNvAddToPlaylistMenu(songs,x,y){
   if(!songs||!songs.length) return;
-  var items=[{label:'+ \u65b0\u5efa Navidrome \u6b4c\u5355...',act:'nv-add-newpl',accent:true,songs:songs}];
-  if(NVData.playlists.length) items.push({sep:true});
-  for(var i=0;i<NVData.playlists.length;i++){
-    var p=NVData.playlists[i];
-    items.push({label:p.name,act:'nv-add-target',plId:p.id,plName:p.name,songs:songs});
+  var s0=songs[0];
+  var src=(s0&&s0.src&&typeof sourceById==='function'&&sourceById(s0.src))||(typeof activeSource==='function'&&(activeSource()||sourceById('navidrome')))||null;
+  var isLocal=!!(src&&src.id==='local');
+  var pls=(src&&src.playlists)?src.playlists().list:[];
+  var items=[{label:T(isLocal?'menu.add_new_pl':'menu.add_new_nv_pl'),act:'nv-add-newpl',accent:true,songs:songs,srcId:src?src.id:''}];
+  var editable=[];
+  for(var i=0;i<pls.length;i++) if(pls[i].editable!==false) editable.push(pls[i]);
+  if(editable.length) items.push({sep:true});
+  for(i=0;i<editable.length;i++){
+    var p=editable[i];
+    items.push({label:p.name,act:'nv-add-target',plId:p.id,plName:p.name,songs:songs,srcId:src?src.id:''});
   }
   ctxMenu={kind:'nv-addpl', x:x, y:y, items:items};
   repaintAll();
@@ -37,79 +39,87 @@ function openNvAddToPlaylistMenu(songs,x,y){
 
 function openNvTrackMenu(info,x,y){
   if(!info || !info.song) return false;
-  var s=info.song, starred=nvIsStarred('song',s.id);
+  var s=info.song;
+  var tSrc=(s&&s.src&&typeof sourceById==='function'&&sourceById(s.src))||(typeof activeSource==='function'&&(activeSource()||sourceById('navidrome')))||null;
+  var isLocal=!!(tSrc&&tSrc.id==='local');
+  var canLove=!!(tSrc&&typeof sourceCanLove==='function'&&sourceCanLove(tSrc,'song'));
+  var starred=!!(canLove&&tSrc.isLoved&&tSrc.isLoved('song',s.id,s));
   var items=[
-    {label:'\u7acb\u5373\u64ad\u653e',act:'nv-trk-play',accent:true},
-    {label:'\u4ece\u6b64\u5904\u968f\u673a\u64ad\u653e',act:'nv-trk-shuf'},
-    {label:'\u6dfb\u52a0\u5230\u64ad\u653e\u961f\u5217',act:'nv-trk-queue'},
-    {sep:true},
-    {label:starred?'\u53d6\u6d88\u7ea2\u5fc3\u6536\u85cf':'\u6dfb\u52a0\u5230\u6211\u559c\u6b22\u7684\u97f3\u4e50',act:'nv-trk-star'},
-    {label:'\u6dfb\u52a0\u5230 Navidrome \u6b4c\u5355...',act:'nv-trk-addmenu'}
+    {label:T('menu.trk_play'),act:'nv-trk-play',accent:true},
+    {label:T('menu.trk_shuf'),act:'nv-trk-shuf'},
+    {label:T('menu.trk_queue'),act:'nv-trk-queue'},
+    {sep:true}
   ];
+  if(canLove) items.push({label:starred?T('menu.trk_unstar'):T('menu.trk_star'),act:'nv-trk-star'});
+  items.push({label:T(isLocal?'menu.trk_add_local_pl':'menu.trk_add_pl'),act:'nv-trk-addmenu'});
   if(s.albumId || s.artistId){
     items.push({sep:true});
-    if(s.albumId) items.push({label:'\u67e5\u770b\u6240\u5c5e\u4e13\u8f91',act:'nv-trk-album'});
-    if(s.artistId) items.push({label:'\u67e5\u770b\u6b4c\u624b',act:'nv-trk-artist'});
+    if(s.albumId) items.push({label:T('menu.trk_view_album'),act:'nv-trk-album'});
+    if(s.artistId) items.push({label:T('menu.trk_view_artist'),act:'nv-trk-artist'});
   }
-  if(info.plId && info.songIdx>=0){
-    items.push({sep:true},{label:'\u4ece\u6b64\u6b4c\u5355\u79fb\u9664',act:'nv-trk-remove',danger:true});
+  if(info.plId !== '' && info.plId !== undefined && info.songIdx>=0){
+    var plMeta=(tSrc&&tSrc.playlistById)?tSrc.playlistById(info.plId):null;
+    if(!plMeta || plMeta.editable!==false){
+      items.push({sep:true},{label:T('menu.trk_remove'),act:'nv-trk-remove',danger:true});
+    }
   }
   ctxMenu={kind:'nv-track', info:info, x:x, y:y, items:items};
-  repaintAll(); return true;
-}
-
-// right-click a local playlist row. Locked/auto playlists offer nothing -> fall through to JSplitter's menu
-function openTrackMenu(pl,item,x,y){
-  if(!canEditPl(pl)) return false;
-  ctxMenu={kind:'track', pl:pl, item:item, x:x, y:y,
-           items:[{label:'Remove from this playlist',act:'trkremove',danger:true}]};
   repaintAll(); return true;
 }
 
 function executeCtxMenuAction(ctx,entry){
   if(!entry) return;
   var act=entry.act;
+  if(ctx.kind==='snap'){
+    ctxMenu=null;
+    if(typeof applySnapPreset==='function') applySnapPreset(act);
+    repaintAll();
+    return;
+  }
+  if(ctx.kind==='winmenu'){
+    ctxMenu=null;
+    if(typeof openMenu==='function') openMenu(act,ctx.mx||8,TBH);
+    repaintAll();
+    return;
+  }
   if(ctx.kind==='nv-pl'){
     var pid=ctx.plId, po=ctx.plObj;
+    var pSrc=(po&&po.src&&typeof sourceById==='function'&&sourceById(po.src))||(typeof activeSource==='function'&&(activeSource()||sourceById('navidrome')))||null;
     ctxMenu=null;
     if(act==='nv-pl-play'||act==='nv-pl-shuf'){
       var sh=(act==='nv-pl-shuf')?true:undefined;
-      var det=NVData.plDetails[pid];
-      if(det&&!det.loading&&det.songs&&det.songs.length){ nvPlaySongs(det.songs,0,{subKind:'playlist',id:pid,name:po.name},sh); }
-      else nvFetchPlaylistDetail(pid,false,function(d){ if(d&&d.songs&&d.songs.length) nvPlaySongs(d.songs,0,{subKind:'playlist',id:pid,name:po.name},sh); });
+      if(!pSrc) return;
+      var det=pSrc.playlist(pid);
+      var cnt=det.rows?det.rows.count:(det.songs?det.songs.length:0);
+      if(!det.loading&&cnt){ pSrc.play(det.rows||det.songs,0,{subKind:'playlist',id:pid,name:po.name},sh); }
+      else pSrc.fetchPlaylist(pid,false,function(d){ if(d&&((d.rows&&d.rows.count)||(d.songs&&d.songs.length))) pSrc.play(d.rows||d.songs,0,{subKind:'playlist',id:pid,name:po.name},sh); });
       return;
     }
-    if(act==='nv-pl-rename'){ startNvRenamePlaylist(po); return; }
-    if(act==='nv-pl-delete'){ confirmDel={kind:'nv-pl',id:pid,name:po.name}; repaintAll(); return; }
+    if(act==='nv-pl-rename'){ startNvRenamePlaylist(po,pSrc); return; }
+    if(act==='nv-pl-delete'){ confirmDel={kind:'nv-pl',id:pid,name:po.name,srcId:pSrc?pSrc.id:''}; repaintAll(); return; }
     return;
   }
   if(ctx.kind==='nv-addpl'){
+    var aSrc=(entry.srcId&&typeof sourceById==='function'&&sourceById(entry.srcId))||(typeof activeSource==='function'&&(activeSource()||sourceById('navidrome')))||null;
     ctxMenu=null;
-    if(act==='nv-add-newpl'){ startNvCreatePlaylist(entry.songs.map(function(s){return s.id;})); return; }
-    if(act==='nv-add-target'){ nvRequestAddToPlaylist(entry.plId,entry.plName,entry.songs); return; }
+    if(act==='nv-add-newpl'){ startNvCreatePlaylist(entry.songs.map(function(s){return s.id;}), aSrc); return; }
+    if(act==='nv-add-target'){ if(aSrc&&aSrc.playlistOps&&aSrc.playlistOps.addSongs) aSrc.playlistOps.addSongs(entry.plId,entry.plName,entry.songs); return; }
     return;
   }
   if(ctx.kind==='nv-track'){
     var info=ctx.info, s=info.song;
+    var tSrc=(s&&s.src&&typeof sourceById==='function'&&sourceById(s.src))||(typeof activeSource==='function'&&(activeSource()||sourceById('navidrome')))||null;
     ctxMenu=null;
-    if(act==='nv-trk-play'){ nvPlaySongs(info.list||[s],info.idx||0,info.sourceMeta); repaintAll(); return; }
-    if(act==='nv-trk-shuf'){ nvPlaySongs(info.list||[s],info.idx||0,info.sourceMeta,true); repaintAll(); return; }
-    if(act==='nv-trk-queue'){ nvEnqueueSongs([s]); repaintAll(); return; }
-    if(act==='nv-trk-star'){ nvToggleStar('song',s.id,s); return; }
+    if(act==='nv-trk-play'){ if(tSrc&&tSrc.play) tSrc.play(info.list||[s],info.idx||0,info.sourceMeta); repaintAll(); return; }
+    if(act==='nv-trk-shuf'){ if(tSrc&&tSrc.play) tSrc.play(info.list||[s],info.idx||0,info.sourceMeta,true); repaintAll(); return; }
+    if(act==='nv-trk-queue'){ if(tSrc&&tSrc.enqueue) tSrc.enqueue([s]); return; }
+    if(act==='nv-trk-star'){ if(tSrc&&tSrc.toggleLoved) tSrc.toggleLoved('song',s.id,s); return; }
     if(act==='nv-trk-addmenu'){ openNvAddToPlaylistMenu([s],ctx.x,ctx.y); return; }
-    if(act==='nv-trk-album'){ nvOpenAlbum(s.albumId,s.album); return; }
-    if(act==='nv-trk-artist'){ nvOpenArtist(s.artistId,s.artist); return; }
-    if(act==='nv-trk-remove'){ nvRemoveSongFromServerPlaylist(info.plId,info.songIdx); return; }
+    if(act==='nv-trk-album'){ brOpenAlbum(s.albumId,s.album); return; }
+    if(act==='nv-trk-artist'){ brOpenArtist(s.artistId,s.artist); return; }
+    if(act==='nv-trk-remove'){ if(tSrc&&tSrc.playlistOps&&tSrc.playlistOps.removeSong) tSrc.playlistOps.removeSong(info.plId,info.songIdx); return; }
     return;
   }
-  var pl=ctx.pl, nm=ctx.name, itm=ctx.item;
-  if(act==='trkremove'){ ctxMenu=null; removeTrackFromPl(pl,itm); return; }
-  if(act==='addfiles'||act==='addfolder'){
-    ctxMenu=null; firstRow=firstRowT=0; view='playlist'; repaintAll();
-    if(act==='addfiles') addFilesToPl(pl); else addFolderToPl(pl);
-  }
-  else if(act==='rename'){ startRename(pl); }
-  else { confirmDel={pl:pl,name:nm}; ctxMenu=null; repaintAll(); }
 }
 
 function canEditPl(pl){
@@ -178,40 +188,44 @@ function removeTrackFromPl(pl,item){
   if(playing && !wasPaused) verifyAdvanced(h);
   invalidateItems(); updateNP(); repaintAll();
 }
-function startRename(pl){ renameEdit={kind:'local-pl', pl:pl, text:plman.GetPlaylistName(pl), title:'Rename playlist', saveLabel:'Save'}; ctxMenu=null; caretOn=true; startCaret(); applyKeyMode(); repaintAll(); }
-function startNvRenamePlaylist(plObj){ renameEdit={kind:'nv-rename', id:plObj.id, text:plObj.name, title:'\u91cd\u547d\u540d Navidrome \u6b4c\u5355', saveLabel:'\u4fdd\u5b58'}; ctxMenu=null; caretOn=true; startCaret(); applyKeyMode(); repaintAll(); }
-function startNvCreatePlaylist(songIds){ renameEdit={kind:'nv-create', text:'', songIds:songIds||[], title:'\u65b0\u5efa Navidrome \u6b4c\u5355', saveLabel:'\u521b\u5efa'}; ctxMenu=null; caretOn=true; startCaret(); applyKeyMode(); repaintAll(); }
+function startNvRenamePlaylist(plObj,src){
+  var opSrc=src||(typeof activeSource==='function'&&(activeSource()||sourceById('navidrome')))||null;
+  var isLocal=!!(opSrc&&opSrc.id==='local');
+  renameEdit={kind:'nv-rename', id:plObj.id, srcId:opSrc?opSrc.id:'', text:plObj.name, title:T(isLocal?'dlg.rename_pl':'dlg.rename_nv_pl'), saveLabel:T('btn.save')};
+  ctxMenu=null; caretOn=true; startCaret(); applyKeyMode(); repaintAll();
+}
+function startNvCreatePlaylist(songIds,src){
+  var opSrc=src||(typeof activeSource==='function'&&(activeSource()||sourceById('navidrome')))||null;
+  var isLocal=!!(opSrc&&opSrc.id==='local');
+  renameEdit={kind:'nv-create', srcId:opSrc?opSrc.id:'', text:'', songIds:songIds||[], title:T(isLocal?'dlg.create_pl':'dlg.create_nv_pl'), saveLabel:T('btn.create')};
+  ctxMenu=null; caretOn=true; startCaret(); applyKeyMode(); repaintAll();
+}
 function commitRename(){
   if(!renameEdit) return;
   var re=renameEdit, t=re.text.replace(/^\s+|\s+$/g,'');
   renameEdit=null; applyKeyMode();
   if(t){
-    if(re.kind==='nv-rename') nvRenameServerPlaylist(re.id,t);
-    else if(re.kind==='nv-create') nvCreateServerPlaylist(t,re.songIds,function(pl){
-      if(pl && (!re.songIds || !re.songIds.length)) nvOpenPlaylist(pl.id,pl.name);
+    var opSrc=(re.srcId&&typeof sourceById==='function'&&sourceById(re.srcId))||(typeof activeSource==='function'&&(activeSource()||sourceById('navidrome')))||null;
+    if(re.kind==='nv-rename'){ if(opSrc&&opSrc.playlistOps&&opSrc.playlistOps.rename) opSrc.playlistOps.rename(re.id,t); }
+    else if(re.kind==='nv-create'){ if(opSrc&&opSrc.playlistOps&&opSrc.playlistOps.create) opSrc.playlistOps.create(t,re.songIds,function(pl){
+      if(pl && (!re.songIds || !re.songIds.length)) brOpenPlaylist(pl.id,pl.name);
       repaintAll();
-    });
-    else plman.RenamePlaylist(re.pl,t);
+    }); }
   }
   repaintAll();
 }
 function cancelRename(){ renameEdit=null; applyKeyMode(); repaintAll(); }
-function doDeletePlaylist(pl){
-  var wasShown=(view==='playlist' && pl===plman.ActivePlaylist);
-  try{ plman.RemovePlaylist(pl); }catch(e){}
-  confirmDel=null; invalidateItems();
-  if(wasShown || plman.PlaylistCount===0) view='home';
-  repaintAll();
-}
-function doDeleteNvPlaylist(id){
+function doDeleteNvPlaylist(id,srcId){
+  var sid=srcId||(confirmDel&&confirmDel.srcId)||'';
   confirmDel=null;
-  nvDeleteServerPlaylist(id,function(ok){
-    if(ok && view==='navidrome' && nvView==='playlist' && nvViewId===id) nvOpenHome();
+  var opSrc=(sid&&typeof sourceById==='function'&&sourceById(sid))||(typeof activeSource==='function'&&(activeSource()||sourceById('navidrome')))||null;
+  if(opSrc&&opSrc.playlistOps&&opSrc.playlistOps.remove) opSrc.playlistOps.remove(id,function(ok){
+    if(ok && view==='browse' && brView==='playlist' && brViewId===id) brOpenHome();
     repaintAll();
   });
 }
 
-function newPlaylistName(){ var b='New Playlist', nm=b, k=1, i; for(;;){ var hit=false; for(i=0;i<plman.PlaylistCount;i++){ if(plman.GetPlaylistName(i)===nm){ hit=true; break; } } if(!hit) return nm; k++; nm=b+' '+k; } }
+function newPlaylistName(){ var b=T('nav.default_pl_name'), nm=b, k=1, i; for(;;){ var hit=false; for(i=0;i<plman.PlaylistCount;i++){ if(plman.GetPlaylistName(i)===nm){ hit=true; break; } } if(!hit) return nm; k++; nm=b+' '+k; } }
 function createNewPlaylist(){ return plman.CreatePlaylist(plman.PlaylistCount, newPlaylistName()); }
 function addFilesToPl(i){ if(i<0 || plman.IsPlaylistLocked(i)) return; plman.ActivePlaylist=i; armDupWatch(i); fb.AddFiles(); }
 function addFolderToPl(i){ if(i<0 || plman.IsPlaylistLocked(i)) return; plman.ActivePlaylist=i; armDupWatch(i); fb.AddDirectory(); }

@@ -77,6 +77,15 @@ var DRP_ON = propNum('Discord: show the playing track (1 = on)', 1) > 0;
 var THEME_MODE = Math.round(propNum('Display: colour mode (0 = auto, 1 = dark, 2 = light)', 0));
 if(THEME_MODE!==1 && THEME_MODE!==2) THEME_MODE=0;
 
+/* Language mode. 'auto' follows Windows UI locale (zh-* -> zh-CN, otherwise en). Set 'en' or 'zh-CN' to override. */
+var LANGUAGE_MODE = propStr('Display: language (auto / en / zh-CN)', 'auto');
+
+/* Local Loved tag configuration: writes LOVED=1 (or configured field/match value) on file tags. */
+var LOVED_FIELD = propStr('Loved: tag field', 'LOVED') || 'LOVED';
+var LOVED_MATCH = propStr('Loved: tag value that means loved (empty = any non-empty value)', '');
+var LOVED_WRITE = propNum('Loved: write tags to files (1 = on)', 1) > 0;
+var LOVED_CONFIRMED_PROP = 'Loved: tag write confirmed (0 / 1)';
+
 /* Animation target rate. 0 = auto targets 120fps (8ms interval; Windows SetTimer typically caps
    around ~100Hz while keeping physical speed consistent via elapsed dt). Set 60..240 as desired. */
 var ANIM_FPS_RAW = propNum('Animation: target FPS (0 = auto)', 0);

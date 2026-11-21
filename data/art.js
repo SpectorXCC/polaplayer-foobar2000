@@ -380,9 +380,9 @@ function maskedArt(h,seed,size,rad,isCircle){
   capPut(cArtCache,cArtOrder,CART_CAP,k,res); return res;
 }
 function drawCircle(gr,x,y,size,h,seed){
-  var cid=(h && typeof nvCoverIdFromPath==='function')?nvCoverIdFromPath(h.Path):'';
-  if(cid && typeof nvDrawCircle==='function'){
-    if(!nvArtLoaded(cid) || nvGetArt(cid)){ nvDrawCircle(gr,x,y,size,cid,seed); return; }
+  var cid=(h && typeof coverIdForHandle==='function')?coverIdForHandle(h):'';
+  if(cid && typeof coverDrawCircle==='function'){
+    if(!coverReady(cid) || coverHasBitmap(cid)){ coverDrawCircle(gr,x,y,size,cid,seed); return; }
   }
   var ci=maskedArt(h,seed,size,0,true);
   if(!drawBlitCentered(gr,ci,x,y,size)) gr.FillEllipse(x,y,size,size,coverCol(seed));
@@ -447,49 +447,11 @@ function drawPlCover(gr,x,y,size,rad,pi,seed){
    that one is painted live rather than doubling the cache.
    Art arrives asynchronously, so a card is not cached until its cover is ready -- the same guard
    maskedArt and mosaicImg use, without which a card would keep its placeholder forever. */
-var plCardCache={};
 function plCoverReady(pi){
   var c=plChoice(pi), i, h;
   if(c.wait) return false;                  // still choosing -> a baked card would keep the placeholder
   for(i=0;i<c.list.length;i++){ h=c.list[i]; if(h && !artLoaded(albKey(h))) return false; }
   h=c.single; return !h || artLoaded(albKey(h));
-}
-function paintPlCardShell(gr,x,y,w,pi,hov){
-  gr.FillRoundRect(x,y,w,w+56,8,8,hov?COL.cardHov:COL.elev);
-  if(hov && typeof strokeRound==='function') strokeRound(gr,x,y,w,w+56,8,1,COL.line);
-  var cs=w-24;
-  drawPlCover(gr,x+12,y+12,cs,6,pi,plName(pi));
-}
-function paintPlCardText(gr,x,y,w,pi,hov,x0,x1,y0,y1,clipL,clipR,clipT,clipB){
-  var cs=w-24, name=plName(pi), sub=plCount(pi)+' songs', tw=cs-(hov?26:0);
-  if(clipL!==undefined && x+12<clipL){
-    drawCardTextLeftClipped(gr,x,y,w,name,sub,false,hov,tw,cs,x0,x1,y0,y1);
-    return;
-  }
-  var tCol=hov?COL.green:COL.text, sCol=hov?COL.text:COL.text2;
-  tCard(gr,name,FONT.card,tCol,x+12,y+cs+18,tw,20,false,clipL,clipR,clipT,clipB);
-  tCard(gr,sub,FONT.plSub,sCol,x+12,y+cs+40,cs,16,false,clipL,clipR,clipT,clipB);
-}
-function paintPlCard(gr,x,y,w,pi,hov){
-  paintPlCardShell(gr,x,y,w,pi,hov);
-  paintPlCardText(gr,x,y,w,pi,hov,x,x+w,y,y+w+56);
-}
-function renderPlCard(pi,w,hov){
-  var im=null;
-  try{
-    im=dpiImage(w,w+56); var g=dpiGraphics(im.GetGraphics());
-    g.SetSmoothingMode(2);
-    g.FillSolidRect(0,0,w,w+56,COL.base);   // the card's rounded corners must reveal the panel bg
-    paintPlCardShell(g,0,0,w,pi,hov);
-    releaseDpiGraphics(im,g);
-  }catch(e){ if(im){ try{ im.Dispose(); }catch(e2){} } im=null; }
-  return im;
-}
-function plCardImg(pi,w){
-  var key=pi+'|'+w;
-  if(plCardCache.hasOwnProperty(key)) return plCardCache[key];
-  if(!plCoverReady(pi)) return null;        // not cached yet -> retried next frame
-  plCardCache[key]=renderPlCard(pi,w,false); return plCardCache[key];
 }
 /* "All Songs" cover: distinct albums sampled ACROSS the library, not just the first few; the four
    drawn are the first of them that have art (see coverChoice) */

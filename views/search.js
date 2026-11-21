@@ -14,7 +14,7 @@ function drawSearchBox(gr,r){
   var empty=!searchQuery.length, caretH=20, caretY=boxY+(boxH-caretH)/2, caretX;
   if(empty){
     caretX=txtX;
-    tL(gr,'What do you want to play?',FONT.searchTxt,COL.text3,txtX+12,boxY,txtW-12,boxH);
+    tL(gr,T('search.placeholder'),FONT.searchTxt,COL.text3,txtX+12,boxY,txtW-12,boxH);
   } else {
     tL(gr,searchQuery,FONT.searchTxt,COL.text,txtX,boxY,txtW,boxH);
     caretX=txtX+Math.min(txtW,gr.CalcTextWidth(searchQuery,FONT.searchTxt))+2;
@@ -25,132 +25,70 @@ function drawSearchBox(gr,r){
    The search box stays pinned: content is drawn first and allowed to overflow upward, then the
    band above the viewport is painted over and the box redrawn on top. */
 function drawSearch(gr,r){
-  if(typeof libSource!=='undefined' && libSource==='navidrome'){ drawNvSearch(gr,r); return; }
-  HB_CARD=[]; HB_TR=[];
-  computeSearch();
+  HB_BR_CARDS=[]; HB_BR_TR=[]; HB_BR_STAR=[]; HB_BR_TRDOTS=[]; HB_BR_PLDOTS=[];
   var pad=M.cpad, x0=r.x+pad, w=r.w-pad*2, i;
-  var boxH=SBOX_H, boxY=r.y+SBOX_TOP;
-  if(!searchQuery.length){
-    drawSearchBox(gr,r);
-    tL(gr,'Search your playlists and library.',FONT.qArtist,COL.text3,x0+2,boxY+boxH+18,w,18);
-    return;
-  }
-  if(!searchArts.length && !searchTrks.length){
-    drawSearchBox(gr,r);
-    tC(gr,'No results found for "'+searchQuery+'"',FONT.sect,COL.text2,r.x,r.y+Math.round(r.h/2),r.w,24);
-    return;
-  }
-  var top=boxY+boxH+26, cropY=r.y+r.h, viewH=cropY-top;
-  // ---- measure the document, then clamp the scroll to it ----
-  var gap=16, cardW=176, cols=Math.max(2,Math.floor((w+gap)/(cardW+gap)));
-  cardW=Math.floor((w-gap*(cols-1))/cols);
-  var cardH=cardW+56, rh=56, durW=64;
-  var artsH=searchArts.length?(42+Math.ceil(searchArts.length/cols)*(cardH+8)+18):0;
-  var contentH=artsH+(searchTrks.length?(38+searchTrks.length*rh):0);
-  var maxPx=Math.max(0,contentH-viewH);
-  SEARCH_MAXPX=maxPx;
-  searchScroll=clampPx(searchScroll,maxPx); searchScrollT=clampPx(searchScrollT,maxPx);
-  var cy=top-searchScroll;
-  // ---- artists ----
-  if(searchArts.length){
-    tL(gr,'Artists',FONT.sect2,COL.text,x0,cy,w,28);
-    var gy=cy+42;
-    for(i=0;i<searchArts.length;i++){
-      var ay=gy+Math.floor(i/cols)*(cardH+8);
-      if(ay>=cropY) break;
-      if(ay+cardH<=top) continue;
-      drawArtistCard(gr,x0+(i%cols)*(cardW+gap),ay,cardW,searchArts[i],top,cropY);
-    }
-    cy+=artsH;
-  }
-  // ---- songs ----
-  if(searchTrks.length){
-    tL(gr,'Songs',FONT.sect2,COL.text,x0,cy,w,28);
-    var ry0=cy+38;
-    for(i=0;i<searchTrks.length;i++){
-      var ry=ry0+i*rh;
-      if(ry>=cropY) break;
-      if(ry+rh<=top) continue;
-      var tr=searchTrks[i];
-      if(hv(r.x,Math.max(ry,top),r.x+r.w,Math.min(ry+rh,cropY))) gr.FillRoundRect(x0-8,ry,w+16,rh,4,4,COL.rowHover);
-      drawCover(gr,x0,ry+8,40,4,tr.h,tr.album||tr.title);
-      tL(gr,tr.title,FONT.rowTitle,COL.text,x0+52,ry+8,w-52-durW,20);
-      tL(gr,tr.artist+(tr.album?('  '+CH_BULL+'  '+tr.album):''),FONT.rowArtist,COL.text2,x0+52,ry+30,w-52-durW,16);
-      tR(gr,tr.len,FONT.rowCell,COL.text2,r.x+r.w-pad-durW,ry,durW,rh);
-      var hy0=Math.max(ry,top), hy1=Math.min(ry+rh,cropY);   // clip the click target to the viewport
-      if(hy1>hy0) HB_TR.push({x0:x0-8,y0:hy0,x1:r.x+r.w-pad+8,y1:hy1,srch:true,idx:i});
-    }
-  }
-  // ---- mask the overflow, re-pin the search box, then the scrollbar ----
-  gr.FillSolidRect(r.x,r.y,r.w,top-r.y,COL.base);
-  gr.FillSolidRect(r.x,cropY,r.w,M.pad+2,COL.canvas);
-  drawSearchBox(gr,r);
-  drawScrollbar(gr,x0+w+8,top,viewH,searchScroll,maxPx,viewH,contentH,hv(x0,top,x0+w+16,cropY)||drag==='scroll');
-}
-function drawNvSearch(gr,r){
-  HB_CARD=[]; HB_TR=[];
-  HB_NV_CARDS=[]; HB_NV_TR=[]; HB_NV_STAR=[]; HB_NV_TRDOTS=[]; HB_NV_PLDOTS=[];
-  var pad=M.cpad, x0=r.x+pad, w=r.w-pad*2, i;
-  var boxH=SBOX_H, boxY=r.y+SBOX_TOP, q=searchQuery.trim();
+  var boxH=SBOX_H, boxY=r.y+(r.h<360?12:SBOX_TOP), q=searchQuery.trim();
+  var src=(typeof activeSource==='function'&&(activeSource()||sourceById('local')||sourceById('navidrome')))||null;
   if(!q){
     drawSearchBox(gr,r);
-    tL(gr,'Search Navidrome artists, albums, and songs.',FONT.qArtist,COL.text3,x0+2,boxY+boxH+18,w,18);
+    tL(gr,T((src&&src.id==='local')?'search.hint_local':'search.hint_nv'),FONT.qArtist,COL.text3,x0+2,boxY+boxH+18,w,18);
     return;
   }
-  var st=NVData.search, arts=st.artists||[], albs=st.albums||[], songs=st.songs||[];
-  if(!arts.length && !albs.length && !songs.length){
+  var st=src?src.searchResults():{artists:[],albums:[],songs:[],rows:EMPTY_ROWS,loading:false,requested:'',err:''};
+  var arts=st.artists||[], albs=st.albums||[], rows=st.rows||makeListRows(st.songs);
+  if(!arts.length && !albs.length && !rows.count){
     drawSearchBox(gr,r);
-    var msg=(st.loading || st.requested!==q) ? '\u6b63\u5728\u641c\u7d22 Navidrome...' : (st.err ? st.err : ('No results found for "'+searchQuery+'"'));
+    var msg=(st.loading || st.requested!==q) ? T('search.searching_nv') : (st.err ? st.err : T('search.no_results',searchQuery));
     tC(gr,msg,FONT.sect,COL.text2,r.x,r.y+Math.round(r.h/2),r.w,24);
     return;
   }
   var top=boxY+boxH+26, cropY=r.y+r.h, viewH=cropY-top;
-  var gap=16, cardW=176, cols=Math.max(2,Math.floor((w+gap)/(cardW+gap)));
-  cardW=Math.floor((w-gap*(cols-1))/cols);
+  var gap=16, minCard=w<380?124:176, cols=Math.max(2,Math.floor((w+gap)/(minCard+gap)));
+  var cardW=Math.max(80,Math.floor((w-gap*(cols-1))/cols));
   var cardH=cardW+56, rh=56;
   var artsH=arts.length?(42+Math.ceil(arts.length/cols)*(cardH+8)+18):0;
   var albsH=albs.length?(42+Math.ceil(albs.length/cols)*(cardH+8)+18):0;
-  var songsH=songs.length?(38+songs.length*rh):0;
+  var songsH=rows.count?(38+rows.count*rh):0;
   var contentH=artsH+albsH+songsH, maxPx=Math.max(0,contentH-viewH);
   SEARCH_MAXPX=maxPx;
   searchScroll=clampPx(searchScroll,maxPx); searchScrollT=clampPx(searchScrollT,maxPx);
   var cy=top-searchScroll;
   if(arts.length){
-    tL(gr,'Artists',FONT.sect2,COL.text,x0,cy,w,28);
+    tL(gr,T('search.artists'),FONT.sect2,COL.text,x0,cy,w,28);
     var gy=cy+42;
     for(i=0;i<arts.length;i++){
       var ay=gy+Math.floor(i/cols)*(cardH+8);
       if(ay>=cropY) break;
       if(ay+cardH<=top) continue;
       var ar=arts[i];
-      nvDrawCard(gr,x0+(i%cols)*(cardW+gap),ay,cardW,ar.coverArt,ar.name,ar.name,(ar.albumCount?ar.albumCount+' albums':'Artist'),true,'artist',ar.id,ar,false,undefined,undefined,top,cropY);
-      var hbA=HB_NV_CARDS[HB_NV_CARDS.length-1];
+      brDrawCard(gr,x0+(i%cols)*(cardW+gap),ay,cardW,ar.coverArt,ar.name,ar.name,(ar.albumCount?T('meta.album_count',ar.albumCount):T('meta.artist_sub')),true,'artist',ar.id,ar,false,undefined,undefined,top,cropY);
+      var hbA=HB_BR_CARDS[HB_BR_CARDS.length-1];
       if(hbA){ hbA.y0=Math.max(top,hbA.y0); hbA.y1=Math.min(cropY,hbA.y1); }
     }
     cy+=artsH;
   }
   if(albs.length){
-    tL(gr,'Albums',FONT.sect2,COL.text,x0,cy,w,28);
+    tL(gr,T('search.albums'),FONT.sect2,COL.text,x0,cy,w,28);
     var ay0=cy+42;
     for(i=0;i<albs.length;i++){
       var ly=ay0+Math.floor(i/cols)*(cardH+8);
       if(ly>=cropY) break;
       if(ly+cardH<=top) continue;
       var al=albs[i];
-      nvDrawCard(gr,x0+(i%cols)*(cardW+gap),ly,cardW,al.coverArt,al.name,al.name,(al.artist||'')+(al.year?(' '+CH_DOT+' '+al.year):''),false,'album',al.id,al,false,undefined,undefined,top,cropY);
-      var hbL=HB_NV_CARDS[HB_NV_CARDS.length-1];
+      brDrawCard(gr,x0+(i%cols)*(cardW+gap),ly,cardW,al.coverArt,al.name,al.name,(al.artist||'')+(al.year?(' '+CH_DOT+' '+al.year):''),false,'album',al.id,al,false,undefined,undefined,top,cropY);
+      var hbL=HB_BR_CARDS[HB_BR_CARDS.length-1];
       if(hbL){ hbL.y0=Math.max(top,hbL.y0); hbL.y1=Math.min(cropY,hbL.y1); }
     }
     cy+=albsH;
   }
-  if(songs.length){
-    tL(gr,'Songs',FONT.sect2,COL.text,x0,cy,w,28);
-    var ry0=cy+38, sm={kind:'nav',id:'search:'+q,name:'\u641c\u7d22: '+q};
-    for(i=0;i<songs.length;i++){
+  if(rows.count){
+    tL(gr,T('search.songs'),FONT.sect2,COL.text,x0,cy,w,28);
+    var ry0=cy+38, sm={subKind:'search',id:'search:'+q,name:T('search.prefix',q)};
+    for(i=0;i<rows.count;i++){
       var ry=ry0+i*rh;
       if(ry>=cropY) break;
       if(ry+rh<=top) continue;
-      nvDrawTrackRow(gr,r,x0,r.x+r.w-pad,ry,rh,top,cropY,i+1,songs[i],songs,i,sm,'',-1,{showAlbum:true,showThumb:true});
+      brDrawTrackRow(gr,r,x0,r.x+r.w-pad,ry,rh,top,cropY,i+1,rows.get(i),rows,i,sm,'',-1,{showAlbum:true,showThumb:true});
     }
   }
   gr.FillSolidRect(r.x,r.y,r.w,top-r.y,COL.base);

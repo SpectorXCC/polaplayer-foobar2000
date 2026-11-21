@@ -16,9 +16,9 @@ function enterFullscreen(){
   capW=-1; applyCaption(); applyKeyMode();
   fsView='lyrics'; stopLyAnim(); fsLyReset(); nvLoad(); syncNavidromePanel();
   try{
-    if(UIWizard){
-      if(!wasFs) fsRestoreWindow=(UIWizard.WindowState!==1);
-      if(UIWizard.WindowState!==1) UIWizard.ToggleMaximize();
+    if(chromeAttached || UIWizard){
+      if(!wasFs) fsRestoreWindow=!winMaxed();
+      if(!winMaxed()) winToggleMaximize();
     }
   }catch(e){ fsRestoreWindow=false; }
   startFsClock(); repaintAll();
@@ -28,7 +28,7 @@ function exitFullscreen(){
   syncNavidromePanel(); vizMenuOpen=false; stopViz(); stopFsClock(); stopLyAnim();
   disposeFsBackdrop();
   try{
-    if(fsRestoreWindow && UIWizard && UIWizard.WindowState===1) UIWizard.ToggleMaximize();
+    if(fsRestoreWindow && winMaxed()) winToggleMaximize();
   }catch(e){}
   fsRestoreWindow=false;
   repaintAll();
@@ -210,14 +210,14 @@ function fsMiniNP(gr){   // small cover + title + artist, top-left (lyrics/viz v
   var s=64, src=npPlaylistSrc(), srcMaxW=Math.max(40,W-128);
   var tx=64+s+18, vizLeft=W-VIZ_MARGIN-196, npMaxW=Math.max(40,vizLeft-16-tx);
   if(src){
-    var lbl='PLAYING FROM PLAYLIST  ';
+    var lbl=T('eyebrow.playing_from_playlist');
     tL(gr,lbl,FONT.fsSrc,COL.text3,64,20,srcMaxW,20);
     var lw=gr.CalcTextWidth(lbl,FONT.fsSrc);
     tL(gr,src,FONT.fsSrcName,COL.text,64+lw,20,Math.max(0,srcMaxW-lw),20);   // bold: the playlist name
   }
   if(typeof qDrawArt==='function') qDrawArt(gr,64,78,s,6,NP,'np','np');
   else drawCover(gr,64,78,s,6,NP,'np');
-  tL(gr,npTitleStr||'Nothing playing',FONT.sect2,COL.text,tx,84,npMaxW,26);
+  tL(gr,npTitleStr||T('queue.nothing_playing'),FONT.sect2,COL.text,tx,84,npMaxW,26);
   tL(gr,npArtistStr,FONT.qName,COL.text2,tx,116,npMaxW,20);
 }
 // cover + title + artist, centred between the header and the transport bar
@@ -337,7 +337,10 @@ function drawVizWave(gr,top,bot){
 // ---- style dispatch + the picker ----
 /* The waveform is parked, not deleted: it is off the picker on request, and its capture is gated
    on the style below so it costs nothing while it is out. Putting it back is this one line. */
-var VIZ_STYLES=[['Bars','bars'],['Radial ring','radial']];
+var VIZ_STYLES=[];
+onLangChange(function(){
+  VIZ_STYLES=[[T('viz.bars'),'bars'],[T('viz.radial'),'radial']];
+});
 var vizMenuOpen=false, HB_VIZ=null, VIZ_HB=[];
 function setVizStyle(v){
   vizStyle=v; vizMenuOpen=false;
@@ -352,7 +355,7 @@ function drawFsViz(gr,bot){
   fsMiniNP(gr);
   drawVizBody(gr,VIZ_TOP,bot);
   var pw=196, ph=36, px=W-72-pw, py=114;
-  HB_VIZ=drawDropPill(gr,px,py,pw,ph,labelOf(VIZ_STYLES,vizStyle,'Bars'),vizMenuOpen);
+  HB_VIZ=drawDropPill(gr,px,py,pw,ph,labelOf(VIZ_STYLES,vizStyle,T('viz.bars')),vizMenuOpen);
   VIZ_HB=vizMenuOpen?drawDropMenu(gr,HB_VIZ,VIZ_STYLES,vizStyle,pw):[];
 }
 /* A viz frame repaints only the band the visual lives in: at 30fps nothing else on screen has
@@ -459,10 +462,10 @@ function fsArtworkControls(gr,a){
   drawNowPlayingCover(gr,x,y,s,14);
   var titleY=y+s+22, titleSize=Math.max(19,Math.min(30,s/18));
   var titleFont=fsFont(titleSize,true), artistFont=fsFont(Math.max(15,titleSize*0.71),false);
-  var titleH=Math.max(42,Math.ceil(gr.CalcTextHeight('Ag\u6b4c',titleFont))+4);
-  var artistH=Math.max(32,Math.ceil(gr.CalcTextHeight('Ag\u6b4c',artistFont))+4);
-  tL(gr,npTitleStr||'\u6682\u65e0\u64ad\u653e',titleFont,COL.text,x,titleY,s,titleH);
-  tL(gr,npArtistStr||'\u9009\u62e9\u4e00\u9996\u97f3\u4e50',artistFont,RGB(204,204,210),x,titleY+titleH,s,artistH);
+  var titleH=Math.max(42,Math.ceil(gr.CalcTextHeight(LANG_METRIC_TEXT,titleFont))+4);
+  var artistH=Math.max(32,Math.ceil(gr.CalcTextHeight(LANG_METRIC_TEXT,artistFont))+4);
+  tL(gr,npTitleStr||T('meta.now_playing'),titleFont,COL.text,x,titleY,s,titleH);
+  tL(gr,npArtistStr||T('meta.choose_music'),artistFont,RGB(204,204,210),x,titleY+titleH,s,artistH);
   var seekY=titleY+titleH+artistH+20, len=fb.PlaybackLength, time=drag==='seek'?len*dragFrac:fb.PlaybackTime;
   HB_SEEK=drawTrackBar(gr,x,seekY,s,4,RGBA(255,255,255,48),len>0?clamp01(time/len):0);
   tL(gr,fmtTime(time),fsFont(12,false),RGBA(255,255,255,135),x,seekY+9,s/2,20);
@@ -480,7 +483,7 @@ function fsArtworkControls(gr,a){
 function fsCompactControls(gr,a){
   drawNowPlayingCover(gr,a.x,a.y,a.art,8);
   var tx=a.x+a.art+18,tw=Math.max(80,W-a.pad-tx);
-  tL(gr,npTitleStr||'\u6682\u65e0\u64ad\u653e',fsFont(22,true),COL.text,tx,a.y+4,tw,34);
+  tL(gr,npTitleStr||T('queue.nothing_playing'),fsFont(22,true),COL.text,tx,a.y+4,tw,34);
   tL(gr,npArtistStr,fsFont(15,false),RGB(204,204,210),tx,a.y+42,tw,24);
   var len=fb.PlaybackLength,time=drag==='seek'?len*dragFrac:fb.PlaybackTime;
   var sy=H-128,cx=W/2,cy=H-60;
@@ -499,7 +502,7 @@ function fsCompactControls(gr,a){
 }
 function fsLyLayout(gr,model,w,font){
   if(fsLy.model===model&&fsLy.w===w&&fsLy.font===font) return;
-  var lh=Math.ceil(gr.CalcTextHeight('Ag\u6b4c',font)*1.14), gap=Math.round(lh*0.65), rows=[],acc=0;
+  var lh=Math.ceil(gr.CalcTextHeight(LANG_METRIC_TEXT,font)*1.14), gap=Math.round(lh*0.65), rows=[],acc=0;
   for(var i=0;i<model.lines.length;i++){
     var parts=[], paras=model.lines[i].text.split('\n');
     for(var k=0;k<paras.length;k++){
@@ -514,12 +517,12 @@ function fsLyLayout(gr,model,w,font){
 function fsDrawLyrics(gr,a){
   var isRemote=(typeof nvShouldLoadLyrics==='function'&&nvShouldLoadLyrics());
   if(isRemote) nvLoad(); else if(typeof loadLyrics==='function') loadLyrics();
-  var col=RGBA(255,255,255,130), label=isRemote?'NAVIDROME LYRICS':'LYRICS';
+  var col=RGBA(255,255,255,130), label=isRemote?T('lyrics.heading_nv'):T('lyrics.heading');
   tL(gr,label,fsFont(12,true),col,a.rx,a.ry-44,a.rw,24);
   var model=activeLyricsModel();
   if(!model){
     var st=isRemote?NV.status:(lyrics==='none'?'none':'loading');
-    var text=st==='loading'?'\u6b63\u5728\u8bfb\u53d6\u6b4c\u8bcd\u2026':(isRemote&&NV.status==='idle')?'\u97f3\u4e50\u54cd\u8d77\uff0c\u6b4c\u8bcd\u5373\u523b\u5448\u73b0':'\u8fd9\u9996\u6b4c\u6682\u65e0\u6b4c\u8bcd';
+    var text=st==='loading'?T('lyrics.loading'):(isRemote&&NV.status==='idle')?T('lyrics.waiting_music'):T('lyrics.none');
     tL(gr,text,fsFont(Math.max(22,Math.min(36,a.rw/18)),'bold','lyric'),col,a.rx,a.ry+a.rh*0.43,a.rw,80);return;
   }
   var font=fsFont(Math.max(24,Math.min(46,a.rw/17)),'bold','lyric');
@@ -555,7 +558,7 @@ function fsDrawLyrics(gr,a){
     gr.SetTextRenderingHint(0);
   }
   if(model.synced&&Date.now()<fsLy.manualUntil){
-    tL(gr,'\u7a0d\u540e\u81ea\u52a8\u8ddf\u968f\u64ad\u653e',fsFont(12,false),col,a.rx,a.ry+a.rh+15,a.rw,22);
+    tL(gr,T('lyrics.auto_scroll_soon'),fsFont(12,false),col,a.rx,a.ry+a.rh+15,a.rw,22);
   }
 }
 function fsLyricsWheel(step){
@@ -589,7 +592,7 @@ function drawFullscreen(gr){
   }
   var pad=fsGeometry().pad;
   // Keep the buttons below UI Wizard's native title-drag strip.
-  if(fsView!=='viz')tL(gr,'\u6b63\u5728\u64ad\u653e',fsFont(13,true),RGBA(255,255,255,160),pad,60,Math.max(40,W-pad*2-146),28);
+  if(fsView!=='viz')tL(gr,T('queue.now_playing'),fsFont(13,true),RGBA(255,255,255,160),pad,60,Math.max(40,W-pad*2-146),28);
   fsIcon(gr,'equalizer',fsView==='viz'?COL.text:RGBA(255,255,255,130),W-pad-130,64,24,'viz');
   fsIcon(gr,'mic',fsView==='lyrics'?COL.text:RGBA(255,255,255,130),W-pad-76,64,24,'lyrics');
   fsIcon(gr,'compress',COL.text,W-pad-22,64,24,'exit');

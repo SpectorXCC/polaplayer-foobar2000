@@ -122,8 +122,8 @@ function nvResetConnection(){
   NVApi.connTs = 0;
 }
 
-function nvConnection(forceRefresh){
-  var stream = (typeof nvTrackKey === 'function') ? nvStreamConnection(nvTrackKey()) : null;
+function nvConnection(forceRefresh, savedOnly){
+  var stream = (!savedOnly && typeof nvTrackKey === 'function') ? nvStreamConnection(nvTrackKey()) : null;
   if(stream) return stream;
   var now = Date.now();
   if(!forceRefresh && NVApi.connCache && (now - NVApi.connTs) < 8000) return NVApi.connCache;
@@ -306,7 +306,7 @@ function nvApiRequest(c, endpoint, params, opts, done){
   if(typeof opts === 'function'){ done = opts; opts = null; }
   opts = opts || {};
   if(!c){
-    if(done) done(null, { error: 'Not configured', status: 0 });
+    if(done) done(null, { error: T('err.not_configured'), status: 0 });
     return 0;
   }
   try{
@@ -318,7 +318,7 @@ function nvApiRequest(c, endpoint, params, opts, done){
     var timer = window.SetTimeout(function(){
       if(!NVApi.httpTasks[id]) return;
       delete NVApi.httpTasks[id];
-      if(done) done(null, { error: 'Request timed out', status: 0 });
+      if(done) done(null, { error: T('err.timeout'), status: 0 });
     }, timeoutMs);
     NVApi.httpTasks[id] = {
       done: done,
@@ -349,18 +349,18 @@ function nvHttpDispatch(id, success, response, status){
 
   var meta = { error: '', status: Number(status) || 0, code: 0 }, body = null, txt = String(response || '');
   if(!success || meta.status < 200 || meta.status >= 300){
-    meta.error = 'HTTP ' + (meta.status || 'failed');
+    meta.error = T('err.http_status', meta.status || T('err.failed'));
   } else if(txt.length > task.maxBytes){
-    meta.error = 'Response too large';
+    meta.error = T('err.too_large');
   } else {
     try{
       var json = JSON.parse(txt);
       var sr = json && json['subsonic-response'];
       if(sr && sr.status === 'ok') body = sr;
-      else if(sr && sr.error){ meta.error = sr.error.message || 'Subsonic error'; meta.code = Number(sr.error.code) || 0; }
-      else meta.error = 'Invalid Subsonic response';
+      else if(sr && sr.error){ meta.error = sr.error.message || T('err.subsonic'); meta.code = Number(sr.error.code) || 0; }
+      else meta.error = T('err.invalid_resp');
     }catch(e){
-      meta.error = 'Invalid JSON';
+      meta.error = T('err.invalid_json');
     }
   }
   if(task.done) task.done(body, meta);
@@ -407,7 +407,7 @@ function nvNormSong(s){
   if(s.starred && id) NVData.starredMap.song[id] = true;
   return {
     id: id,
-    title: String(s.title || 'Unknown Title'),
+    title: String(s.title || T('meta.unknown_title')),
     artist: String(s.artist || ''),
     album: String(s.album || ''),
     albumId: String(s.albumId || ''),
@@ -425,7 +425,9 @@ function nvNormSong(s){
     composer: String(s.composer || ''),
     bpm: Number(s.bpm) || 0,
     musicBrainzId: String(s.musicBrainzId || ''),
-    replayGain: s.replayGain || null
+    replayGain: s.replayGain || null,
+    loved: !!s.starred,
+    src: 'navidrome'
   };
 }
 
@@ -435,7 +437,7 @@ function nvNormAlbum(a){
   if(a.starred && id) NVData.starredMap.album[id] = true;
   return {
     id: id,
-    name: String(a.name || a.title || 'Unknown Album'),
+    name: String(a.name || a.title || T('meta.unknown_album')),
     artist: String(a.artist || ''),
     artistId: String(a.artistId || ''),
     year: a.year ? String(a.year) : '',
@@ -443,7 +445,8 @@ function nvNormAlbum(a){
     songCount: Number(a.songCount) || 0,
     duration: Math.max(0, Number(a.duration) || 0),
     coverArt: String(a.coverArt || a.id || ''),
-    starred: !!a.starred
+    starred: !!a.starred,
+    loved: !!a.starred
   };
 }
 
@@ -453,23 +456,25 @@ function nvNormArtist(a){
   if(a.starred && id) NVData.starredMap.artist[id] = true;
   return {
     id: id,
-    name: String(a.name || 'Unknown Artist'),
+    name: String(a.name || T('meta.unknown_artist')),
     albumCount: Number(a.albumCount) || 0,
     coverArt: String(a.coverArt || (id ? ('ar-' + id) : '')),
-    starred: !!a.starred
+    starred: !!a.starred,
+    loved: !!a.starred
   };
 }
 
 function nvNormPlaylist(p){
   return {
     id: String(p.id || ''),
-    name: String(p.name || 'Untitled Playlist'),
+    name: String(p.name || T('meta.untitled_playlist')),
     songCount: Number(p.songCount) || 0,
     duration: Math.max(0, Number(p.duration) || 0),
     coverArt: String(p.coverArt || (p.id ? ('pl-' + p.id) : '')),
     owner: String(p.owner || ''),
     public: !!p.public,
-    comment: String(p.comment || '')
+    comment: String(p.comment || ''),
+    editable: true
   };
 }
 
@@ -509,13 +514,13 @@ function nvFetchPlaylists(force, cb){
   if(NVData.playlistsLoading) return;
   if(!force && NVData.playlistsLoaded){ if(cb) cb(true); return; }
   var c = nvConnection(!!force);
-  if(!c){ NVData.error = 'Navidrome server not configured in Preferences > Tools > Navidrome.'; if(cb) cb(false); repaintAll(); return; }
+  if(!c){ NVData.error = T('err.no_server_cfg'); if(cb) cb(false); repaintAll(); return; }
   NVData.playlistsLoading = true;
   NVData.error = '';
   nvApiRequest(c, 'getPlaylists', {}, function(body, meta){
     NVData.playlistsLoading = false;
     if(!body){
-      NVData.error = (meta && meta.error) || 'Failed to connect to Navidrome';
+      NVData.error = (meta && meta.error) || T('err.conn_failed');
       if(cb) cb(false);
       repaintAll();
       return;
@@ -538,7 +543,7 @@ function nvFetchPlaylistDetail(id, force, cb){
   repaintAll();
   nvApiRequest(c, 'getPlaylist', { id: id }, function(body, meta){
     if(!body || !body.playlist){
-      NVData.plDetails[id] = { meta: nvPlaylistById(id), songs: [], loading: false, err: (meta && meta.error) || 'Failed to load playlist', ts: Date.now() };
+      NVData.plDetails[id] = { meta: nvPlaylistById(id), songs: [], loading: false, err: (meta && meta.error) || T('err.pl_load_failed'), ts: Date.now() };
       if(cb) cb(NVData.plDetails[id]);
       repaintAll();
       return;
@@ -578,7 +583,7 @@ function nvFetchAlbums(type, append, force, cb){
   nvApiRequest(c, 'getAlbumList2', params, function(body, meta){
     var st = NVData.albumsByTab[type];
     st.loading = false;
-    if(!body){ st.err = (meta && meta.error) || 'Failed to load albums'; if(cb) cb(st); repaintAll(); return; }
+    if(!body){ st.err = (meta && meta.error) || T('err.alb_list_failed'); if(cb) cb(st); repaintAll(); return; }
     var batch = nvAsArr(body.albumList2 && body.albumList2.album).map(nvNormAlbum);
     if(append) st.list = st.list.concat(batch);
     else st.list = batch;
@@ -598,7 +603,7 @@ function nvFetchAlbumDetail(id, force, cb){
   repaintAll();
   nvApiRequest(c, 'getAlbum', { id: id }, function(body, meta){
     if(!body || !body.album){
-      NVData.albumDetails[id] = { meta: null, songs: [], loading: false, err: (meta && meta.error) || 'Failed to load album', ts: Date.now() };
+      NVData.albumDetails[id] = { meta: null, songs: [], loading: false, err: (meta && meta.error) || T('err.alb_load_failed'), ts: Date.now() };
       if(cb) cb(NVData.albumDetails[id]);
       repaintAll();
       return;
@@ -619,7 +624,7 @@ function nvFetchArtists(force, cb){
   repaintAll();
   nvApiRequest(c, 'getArtists', nvFolderParams(), function(body, meta){
     NVData.artistsLoading = false;
-    if(!body){ NVData.artistsErr = (meta && meta.error) || 'Failed to load artists'; if(cb) cb([]); repaintAll(); return; }
+    if(!body){ NVData.artistsErr = (meta && meta.error) || T('err.art_list_failed'); if(cb) cb([]); repaintAll(); return; }
     var idxs = nvAsArr(body.artists && body.artists.index), out = [], i, j;
     for(i = 0; i < idxs.length; i++){
       var ar = nvAsArr(idxs[i].artist);
@@ -649,7 +654,7 @@ function nvFetchArtistDetail(id, nameHint, force, cb){
   nvApiRequest(c, 'getArtist', { id: id }, function(body, meta){
     if(!body || !body.artist){
       NVData.artistDetails[id].loading = false;
-      NVData.artistDetails[id].err = (meta && meta.error) || 'Failed to load artist';
+      NVData.artistDetails[id].err = (meta && meta.error) || T('err.art_load_failed');
       if(cb) cb(NVData.artistDetails[id]);
       repaintAll();
       return;
@@ -682,7 +687,7 @@ function nvFetchStarred(force, cb){
   repaintAll();
   nvApiRequest(c, 'getStarred2', nvFolderParams(), function(body, meta){
     NVData.starred.loading = false;
-    if(!body){ NVData.starred.err = (meta && meta.error) || 'Failed to load liked music'; if(cb) cb(NVData.starred); repaintAll(); return; }
+    if(!body){ NVData.starred.err = (meta && meta.error) || T('err.loved_load_failed'); if(cb) cb(NVData.starred); repaintAll(); return; }
     var d = body.starred2 || {};
     var songs = nvAsArr(d.song).map(nvNormSong);
     var albums = nvAsArr(d.album).map(nvNormAlbum);
@@ -711,7 +716,7 @@ function nvFetchRandomSongs(count, append, cb){
   nvApiRequest(c, 'getRandomSongs', params, function(body, meta){
     NVData.randomMix.loading = false;
     if(!body){
-      NVData.randomMix.err = (meta && meta.error) || 'Failed to load random songs';
+      NVData.randomMix.err = (meta && meta.error) || T('err.random_load_failed');
       if(cb) cb([]);
       repaintAll();
       return;
@@ -750,7 +755,7 @@ function nvRunSearch(query){
   nvApiRequest(c, 'search3', params, function(body, meta){
     if(NVData.search.requested !== q) return;
     NVData.search.loading = false;
-    if(!body){ NVData.search.err = (meta && meta.error) || 'Search failed'; repaintAll(); return; }
+    if(!body){ NVData.search.err = (meta && meta.error) || T('err.search_failed'); repaintAll(); return; }
     var r3 = body.searchResult3 || {};
     NVData.search.artists = nvAsArr(r3.artist).map(nvNormArtist);
     NVData.search.albums = nvAsArr(r3.album).map(nvNormAlbum);
@@ -785,7 +790,7 @@ function nvRefreshAll(clearArt){
   if(curAlbTab !== 'recent') nvFetchAlbums('recent', false, true);
   if(curAlbTab !== 'newest') nvFetchAlbums('newest', false, true);
   nvFetchStarred(true);
-  if(typeof nvRefreshActiveDetail === 'function') nvRefreshActiveDetail();
+  if(typeof brRefreshActiveDetail === 'function') brRefreshActiveDetail();
 }
 
 function nvToggleStar(kind, id, itemObj, cb){
@@ -899,7 +904,7 @@ function nvAddSongsToServerPlaylist(plId, songs, cb){
     if(offset >= ids.length){
       delete NVData.plDetails[plId];
       nvFetchPlaylists(true);
-      if(typeof nvView === 'string' && nvView === 'playlist' && nvViewId === plId) nvFetchPlaylistDetail(plId, true);
+      if(typeof brView === 'string' && brView === 'playlist' && brViewId === plId) nvFetchPlaylistDetail(plId, true);
       if(cb) cb(true);
       return;
     }

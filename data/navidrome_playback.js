@@ -47,10 +47,10 @@ function nvPlaySongs(songs, startIdx, sourceMeta, forceShuffle){
       startIdx: startIdx,
       startId: list[startIdx].id,
       shuffle: pbShuffle,
-      sourceMeta: sourceMeta || { subKind: 'list', id: '', name: 'Navidrome' }
+      sourceMeta: sourceMeta || { subKind: 'list', id: '', name: T('source.navidrome') }
     };
   }catch(e){
-    NVData.error = 'Playback dispatch failed: ' + String(e.message || e);
+    NVData.error = T('err.pb_dispatch_failed', String(e.message || e));
     repaintAll();
   }
 }
@@ -68,7 +68,8 @@ function nvEnqueueSongs(songs){
 }
 
 function nvMaybeTopUpRandomMix(){
-  if(nvRandomToppingUp || !pbSource || pbSource.kind !== 'nav' || pbSource.subKind !== 'random') return;
+  if(nvRandomToppingUp || !pbSource || pbSource.subKind !== 'random') return;
+  if(pbSource.src !== 'navidrome' && pbSource.kind !== 'nav') return;
   var loc = playingLoc();
   if(!loc || !loc.IsValid) return;
   var pi = loc.PlaylistIndex;
@@ -100,22 +101,7 @@ function nvOnLocationsAdded(taskId, handles){
   if(job.mode === 'append-random'){
     nvRandomToppingUp = false;
     if(job.expectedSeq !== nvPlaySeq || !ordered.length) return true;
-    var rpi = playlistOfName(ROUTE);
-    if(rpi >= 0){
-      var hl = fb.CreateHandleList();
-      for(var i = 0; i < ordered.length; i++) hl.Add(ordered[i]);
-      try{ plman.InsertPlaylistItems(rpi, plman.PlaylistItemCount(rpi), hl, false); }catch(e){}
-    }
-    var spi = playlistOfName(SHUF);
-    if(pbShuffle && spi >= 0){
-      var shufBatch = ordered.slice();
-      shuffleArr(shufBatch);
-      var shl = fb.CreateHandleList();
-      for(var j = 0; j < shufBatch.length; j++) shl.Add(shufBatch[j]);
-      try{ plman.InsertPlaylistItems(spi, plman.PlaylistItemCount(spi), shl, false); }catch(e2){}
-    }
-    invalidateItems();
-    repaintAll();
+    appendRandomHandlesToRouteShuf(ordered);
     return true;
   }
 
@@ -130,7 +116,7 @@ function nvOnLocationsAdded(taskId, handles){
   if(job.mode === 'play'){
     if(job.seq !== nvPlaySeq) return true;   // superseded by a newer click
     if(!ordered.length){
-      NVData.error = 'Failed to resolve Navidrome tracks in foobar2000.';
+      NVData.error = T('err.pb_resolve_failed');
       repaintAll();
       return true;
     }
@@ -142,10 +128,11 @@ function nvOnLocationsAdded(taskId, handles){
     pbShuffle = !!job.shuffle;
     if(prevShuffle !== pbShuffle) applyPlaybackOrder();
     playHandleList(ordered, idx, job.sourceMeta.name, {
+      src: 'navidrome',
       kind: 'nav',
       subKind: job.sourceMeta.subKind || 'list',
       id: job.sourceMeta.id || '',
-      name: job.sourceMeta.name || 'Navidrome',
+      name: job.sourceMeta.name || T('source.navidrome'),
       songs: job.songs
     });
     updateNP();

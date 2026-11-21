@@ -86,6 +86,25 @@ function shuffleExitToSource(){   // shuffle OFF: resume the real playlist (or h
   if(savedActive>=0 && !isHiddenPl(plName(savedActive))) try{ plman.ActivePlaylist=savedActive; }catch(e){}
   if(wasActive && pos>0){ try{ fb.PlaybackTime=pos; }catch(e){} }
 }
+function appendRandomHandlesToRouteShuf(handles){
+  if(!handles || !handles.length) return;
+  var rpi=playlistOfName(ROUTE);
+  if(rpi>=0){
+    var hl=fb.CreateHandleList();
+    for(var i=0;i<handles.length;i++) hl.Add(handles[i]);
+    try{ plman.InsertPlaylistItems(rpi,plman.PlaylistItemCount(rpi),hl,false); }catch(e){}
+  }
+  var spi=playlistOfName(SHUF);
+  if(pbShuffle && spi>=0){
+    var shufBatch=handles.slice();
+    shuffleArr(shufBatch);
+    var shl=fb.CreateHandleList();
+    for(var j=0;j<shufBatch.length;j++) shl.Add(shufBatch[j]);
+    try{ plman.InsertPlaylistItems(spi,plman.PlaylistItemCount(spi),shl,false); }catch(e2){}
+  }
+  invalidateItems();
+  repaintAll();
+}
 function playHandleList(handles,idx,sourceName,sourceMeta){
   var arr=[], i, n=(handles&&handles.Count!==undefined)?handles.Count:(handles?handles.length:0);
   for(i=0;i<n;i++) if(handles[i]) arr.push(handles[i]);

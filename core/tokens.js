@@ -163,6 +163,7 @@ var GLYPH = {
   search:chr(0xE721), home:chr(0xE80F), add:chr(0xE710), more:chr(0xE712), clock:chr(0xE823),
   heart:chr(0xEB52), heartO:chr(0xEB51), album:chr(0xE93C), artist:chr(0xE77B),
   refresh:chr(0xE72C), back:chr(0xE72B), settings:chr(0xE713),
+  sidebar:chr(0xE700), snap:chr(0xE8A9),
   cmin:chr(0xE921), cmax:chr(0xE922), crestore:chr(0xE923), cclose:chr(0xE8BB)
 };
 var CH_DOT=chr(0xB7), CH_BULL=chr(0x2022);
@@ -180,7 +181,7 @@ var DT_C_TOP  = 0x1|0x20|0x800|0x8000;   // center + top + singleline + noprefix
 var LH_F=[], LH_V=[];
 function lineH(gr,f){
   for(var i=0;i<LH_F.length;i++) if(LH_F[i]===f) return LH_V[i];
-  var n=0; try{ n=Math.ceil(gr.CalcTextHeight('Ag\u6b4c',f)); }catch(e){ n=0; }
+  var n=0; try{ n=Math.ceil(gr.CalcTextHeight(LANG_METRIC_TEXT,f)); }catch(e){ n=0; }
   LH_F.push(f); LH_V.push(n); return n;
 }
 var fitY=0, fitH=0;
@@ -275,6 +276,8 @@ var ICONS={
  artist:"<path d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/>",
  refresh:"<path d='M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z'/>",
  back:"<path d='M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z'/>",
+ sidebar:"<path d='M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z'/>",
+ snap:"<path d='M3 4h8v7H3zm10 0h8v7h-8zM3 13h8v7H3zm10 0h8v7h-8z'/>",
  settings:"<path d='M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z'/>"
 };
 var svgCache={};

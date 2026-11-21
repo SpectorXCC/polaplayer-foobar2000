@@ -3,6 +3,7 @@
    with physical-sized fonts; the window is never stretched as a bitmap. */
 var displayTimer=null, displayChecking=false;
 var queueDrawerOpen=false, volumePopupOpen=false, HB_DRAWER=null,drawerDismissedClick=false;
+var navDrawerOpen=false, HB_NAVDRAWER=null, navDrawerDismissedClick=false;
 function px(v){return Math.round(v*UISCALE);}
 function dip(v){return v/UISCALE;}
 function physicalRect(r){
@@ -62,14 +63,14 @@ function displayScale(){
 function clearDisplayCaches(){
   refreshFonts();CORN=null;
   svgCache={};thumbCache={};thumbOrder=[];maskCache={};rectMaskCache={};rectMaskOrder=[];cArtCache={};cArtOrder=[];
-  mosaicCache={};plCardCache={};artCardCache={};artCardN=0;skelImgs={};
+  mosaicCache={};skelImgs={};
   npArtRendered={};npArtRenderedOrder=[];
   if(typeof disposeFsBackdrop==='function') disposeFsBackdrop();
   else{ fsBackdrop=null;fsBackdropArt=null;fsBackdropKey=''; }
   lyLay={lyr:null,w:-1};fsLyReset();
-  navidromeLayoutKey='';capW=-1;capEnd=-1;
+  browseLayoutKey='';capW=-1;capEnd=-1;
   if(typeof nvClearArtDerivCaches==='function') nvClearArtDerivCaches();
-  if(typeof clearNvCardCache==='function') clearNvCardCache();
+  if(typeof clearBrCardCache==='function') clearBrCardCache();
   if(typeof disposeCardTextScratch==='function') disposeCardTextScratch();
   // Bitmap derivatives grow by scale squared; retain roughly the same byte budget.
   var area=Math.max(1,UISCALE*UISCALE);
@@ -91,13 +92,29 @@ function checkDisplay(force){
 }
 function startDisplayWatch(){if(!displayTimer)displayTimer=window.SetInterval(function(){checkDisplay(false);},500);}
 function stopDisplayWatch(){if(displayTimer){window.ClearInterval(displayTimer);displayTimer=null;}}
-function toggleQueueDrawer(){queueDrawerOpen=!queueDrawerOpen;volumePopupOpen=false;layout();repaintAll();}
+function toggleQueueDrawer(){queueDrawerOpen=!queueDrawerOpen;if(queueDrawerOpen)navDrawerOpen=false;volumePopupOpen=false;layout();repaintAll();}
 function dismissQueueDrawer(){if(!queueDrawerOpen)return;queueDrawerOpen=false;layout();repaintAll();}
+function toggleNavDrawer(){navDrawerOpen=!navDrawerOpen;if(navDrawerOpen)queueDrawerOpen=false;volumePopupOpen=false;layout();repaintAll();}
+function dismissNavDrawer(){if(!navDrawerOpen)return;navDrawerOpen=false;layout();repaintAll();}
 function drawerPointer(x,y){
-  if(fsMode||!R.drawer||!queueDrawerOpen)return false;
-  if(HB_DRAWER&&inRect(x,y,HB_DRAWER))return false;
-  if(x<R.queue.x||y<R.queue.y||y>=R.queue.y+R.queue.h){dismissQueueDrawer();return true;}
+  if(fsMode)return false;
+  if(R.drawer&&queueDrawerOpen){
+    if(HB_DRAWER&&inRect(x,y,HB_DRAWER))return false;
+    if(x<R.queue.x||y<R.queue.y||y>=R.queue.y+R.queue.h){dismissQueueDrawer();return true;}
+  }
+  if(R.navDrawer&&navDrawerOpen){
+    if(HB_NAVDRAWER&&inRect(x,y,HB_NAVDRAWER))return false;
+    var ny1=R.navLib?(R.navLib.y+R.navLib.h):(R.navTop.y+R.navTop.h);
+    if(x<R.navTop.x||x>=R.navTop.x+R.navTop.w||y<R.navTop.y||y>=ny1){dismissNavDrawer();return true;}
+  }
   return false;
+}
+function drawNavLayer(gr){
+  if(R.navDrawer){
+    if(!navDrawerOpen) return;
+    gr.FillSolidRect(0,TBH,W,Math.max(0,R.barY-TBH),RGBA(0,0,0,120));
+  }
+  drawNav(gr);
 }
 function drawQueueLayer(gr){
   if(R.drawer){

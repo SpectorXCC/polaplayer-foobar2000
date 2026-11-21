@@ -53,10 +53,35 @@ function nvRequestAddToPlaylist(plId, plName, songs){
   if(det && !det.loading && !det.err){ checkWith(det.songs || []); return; }
   nvFetchPlaylistDetail(plId, false, function(d){ checkWith((d && d.songs) ? d.songs : []); });
 }
+function localRequestAddToPlaylist(plId, plName, songs){
+  if(plId === '' || plId === undefined || !songs || !songs.length) return;
+  var pi = parseInt(plId, 10);
+  if(isNaN(pi) || pi < 0 || pi >= plman.PlaylistCount) return;
+  var it = getItems(pi), seen = {}, dupIdx = [], uniq = [], rows = [], i, s, k;
+  if(it){
+    for(i = 0; i < it.Count; i++){ k = trackKey(it[i]); if(k) seen[k] = true; }
+  }
+  for(i = 0; i < songs.length; i++){
+    s = songs[i]; if(!s) continue;
+    var h = (s.RawPath || s.Path) ? s : (s.h || (typeof localHandleForId === 'function' ? localHandleForId(s.id) : null));
+    k = h ? trackKey(h) : String(s.id || '').toLowerCase();
+    if(k && seen[k]){ dupIdx.push(i); rows.push({ t: s.title || '', a: s.artist || '' }); }
+    else { if(k) seen[k] = true; uniq.push(s); }
+  }
+  if(!dupIdx.length){ if(typeof localInsertSongsToPlaylist === 'function') localInsertSongsToPlaylist(pi, songs); return; }
+  dupPrompt = { kind: 'local-add', plId: String(pi), name: plName || plNameCache[pi] || plman.GetPlaylistName(pi), idx: dupIdx, rows: rows, allSongs: songs, uniqueSongs: uniq };
+  repaintAll();
+}
 function dupSkip(){
   var d=dupPrompt; dupPrompt=null;
   if(d && d.kind==='nv'){
     if(d.uniqueSongs && d.uniqueSongs.length) nvAddSongsToServerPlaylist(d.plId,d.uniqueSongs);
+    repaintAll(); return;
+  }
+  if(d && d.kind==='local-add'){
+    if(d.uniqueSongs && d.uniqueSongs.length && typeof localInsertSongsToPlaylist === 'function'){
+      localInsertSongsToPlaylist(parseInt(d.plId, 10), d.uniqueSongs);
+    }
     repaintAll(); return;
   }
   if(d && d.pl<plman.PlaylistCount && canRemoveFrom(d.pl)){
@@ -71,6 +96,9 @@ function dupSkip(){
 function dupKeep(){
   var d=dupPrompt; dupPrompt=null;
   if(d && d.kind==='nv' && d.allSongs && d.allSongs.length) nvAddSongsToServerPlaylist(d.plId,d.allSongs);
+  else if(d && d.kind==='local-add' && d.allSongs && d.allSongs.length && typeof localInsertSongsToPlaylist === 'function'){
+    localInsertSongsToPlaylist(parseInt(d.plId, 10), d.allSongs);
+  }
   repaintAll();
 }
 
@@ -82,16 +110,17 @@ function drawDupPrompt(gr){
   var cw=Math.min(480,W-40), ch=188+show*lh+(more>0?22:0);
   var cy=Math.max(10,Math.round((H-ch)/2)), cx=modalPanel(gr,cw,ch,cy);
   var px=cx+28, pw=cw-56, y=cy+24;
-  tL(gr,n===1?'1 song is already here':(n+' songs are already here'),FONT.sect,COL.text,px,y,pw,26); y+=34;
-  tL(gr,'Already in "'+dupPrompt.name+'":',FONT.pl,COL.text2,px,y,pw,22); y+=30;
+  tL(gr,n===1?T('dlg.dup_one'):T('dlg.dup_many',n),FONT.sect,COL.text,px,y,pw,26); y+=34;
+  tL(gr,T('dlg.dup_already_in',dupPrompt.name),FONT.pl,COL.text2,px,y,pw,22); y+=30;
   var tw=Math.round(pw*0.58), ax=px+tw+10, aw=pw-tw-10;
   for(var i=0;i<show;i++){
     tL(gr,dupPrompt.rows[i].t,FONT.rowTitle,COL.text,px,y,tw,20);
     tL(gr,dupPrompt.rows[i].a,FONT.rowArtist,COL.text2,ax,y+1,aw,18);
     y+=lh;
   }
-  if(more>0){ tL(gr,'and '+more+' more',FONT.plSub,COL.text3,px,y,pw,20); y+=22; }
-  var w2=pillW(gr,'Skip duplicates'), w1=pillW(gr,'Add anyway'), gap=12;
+  if(more>0){ tL(gr,T('dlg.dup_more',more),FONT.plSub,COL.text3,px,y,pw,20); y+=22; }
+  var skipLbl=T('btn.skip_dups'), keepLbl=T('btn.add_anyway');
+  var w2=pillW(gr,skipLbl), w1=pillW(gr,keepLbl), gap=12;
   var by=cy+ch-22-PILL_H, x2=cx+cw-28-w2, x1=x2-gap-w1;
-  DUP_HB={ keep:drawPill(gr,x1,by,w1,'Add anyway',false), skip:drawPill(gr,x2,by,w2,'Skip duplicates',true) };
+  DUP_HB={ keep:drawPill(gr,x1,by,w1,keepLbl,false), skip:drawPill(gr,x2,by,w2,skipLbl,true) };
 }

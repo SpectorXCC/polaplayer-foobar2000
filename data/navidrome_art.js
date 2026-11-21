@@ -35,7 +35,7 @@ function nvClearAllArt(){
   nvArtPending = {}; nvArtQueue = []; nvArtWarmQueue = [];
   nvHueCache = {};
   nvClearArtDerivCaches();
-  if(typeof clearNvCardCache === 'function') clearNvCardCache();
+  if(typeof clearBrCardCache === 'function') clearBrCardCache();
 }
 
 function nvArtFinish(coverId, img){

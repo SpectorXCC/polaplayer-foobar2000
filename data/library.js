@@ -77,21 +77,6 @@ function artistCover(name,fallback){
 }
 // false while the scan can still move the choice: baking a card now would freeze its placeholder
 function artistCoverReady(name,fallback){ return coverPick('ar|'+name,artistCands(name,fallback),1).done; }
-function loadArtist(name){
-  viewArtist=name; artScroll=0; artistAlbums=[];
-  var lib=libItems();
-  if(!lib || !lib.Count) return;
-  var arts=libTF('artistName'), albs=libTF('album'),
-      titles=libTF('title'), lens=libTF('len'), yrs=libTF('year');
-  var map={}, order=[];
-  for(var i=0;i<arts.length;i++){
-    if(arts[i]!==name) continue;
-    var al=albs[i]||'Unknown Album';
-    if(!map[al]){ map[al]={album:al, handle:lib[i], year:yrs[i], tracks:[]}; order.push(al); }
-    map[al].tracks.push({title:titles[i], dur:lens[i], handle:lib[i]});
-  }
-  for(var j=0;j<order.length;j++) artistAlbums.push(map[order[j]]);
-}
 
 /* ---- "All Songs" library view: one index of every library track (built once, invalidated by
    the library callbacks), expanded into a flat ROW list of headers + tracks in display order,
@@ -100,7 +85,10 @@ function loadArtist(name){
 var songsIdx=null, songsRows=null, songsTracks=null, songsContentH=0, songsTotalSec=0;
 var songsGroup='none', songsScroll=0, songsScrollT=0, SONGS_MAXPX=0;
 var sgMenuOpen=false, SG_HB=[], HB_SG=null, HB_ALLSONGS=null, HB_RGNORM=null;
-var SONGS_GROUPS=[['No grouping','none'],['By artist','artist'],['By album','album'],['By artist & album','both']];
+var SONGS_GROUPS=[];
+onLangChange(function(){
+  SONGS_GROUPS=[[T('group.none'),'none'],[T('group.artist'),'artist'],[T('group.album'),'album'],[T('group.both'),'both']];
+});
 /* ---- group-list metrics: one indent step per nesting level (SG_IND) and one shared vertical
    rhythm per header -- GAP above (the divider sits at its top), artwork, PADB below. Header
    heights are DERIVED from those parts so every tier lands on the same grid. SG_H1B is the
@@ -111,7 +99,7 @@ var SG_ART1=56, SG_ART2=44, SG_TGAP=18, SG_SLABP=10;
 var SG_H1=SG_GAP1+SG_ART1+SG_PADB1;                  // 92  top-level header
 var SG_H1B=SG_GAP1+SG_SLABP*2+SG_ART1+SG_PADB1;      // 112 artist banner (slab around artwork)
 var SG_H2=SG_GAP2+SG_ART2+SG_PADB2;                  // 68  nested header
-var SG_TRH=44, SHEAD=312, SG_CROP=96;
+var SG_TRH=44, SG_CROP=96;
 function getSongsIdx(){
   if(songsIdx) return songsIdx;
   var lib=libItems();
@@ -121,16 +109,52 @@ function getSongsIdx(){
         al=libTF('album'), ln=libTF('len'), ls=libTF('lensec'),
         ak=libTF('albkey'), tn=libTF('trackno'), yr=libTF('year');
     for(var i=0;i<ti.length;i++){
+      var sec=parseInt(ls[i],10)||Math.round(lib[i].Length||0)||0;
       songsTotalSec+=parseInt(ls[i],10)||0;
-      var eT=ti[i]||'', eR=ar[i]||'', eA=aa[i]||'Unknown Artist', eL=al[i]||'Unknown Album';
+      if(ak[i] && typeof registerCoverHandle==='function') registerCoverHandle(ak[i],lib[i]);
+      var eT=ti[i]||'', eR=ar[i]||'', eA=aa[i]||T('meta.unknown_artist'), eL=al[i]||T('meta.unknown_album');
       // sort keys are lowercased once here instead of on every comparison inside cmpStr; a sort
       // does n*log(n) comparisons, so doing it per-comparison scales as badly as the sort itself
       out.push({h:lib[i], title:eT, artist:eR, aartist:eA,
-                album:eL, len:ln[i], artkey:ak[i], year:yr[i]||'', tn:parseInt(tn[i],10)||0,
+                album:eL, len:ln[i], sec:sec, artkey:ak[i], year:yr[i]||'', tn:parseInt(tn[i],10)||0,
                 kT:eT.toLowerCase(), kR:eR.toLowerCase(), kA:eA.toLowerCase(), kL:eL.toLowerCase()});
     }
   }
   songsIdx=out; return out;
+}
+function songsTrackToSong(t){
+  if(!t) return null;
+  var loved=(t.h && typeof lovedIsHandleLoved==='function')?lovedIsHandleLoved(t.h):false;
+  if(t._song){ t._song.loved=loved; return t._song; }
+  if(t.artkey && t.h && typeof registerCoverHandle==='function') registerCoverHandle(t.artkey,t.h);
+  t._song={
+    id:(t.h && typeof lovedTrackId==='function')?lovedTrackId(t.h):'',
+    title:t.title || T('meta.unknown_title'),
+    artist:t.artist || '',
+    album:t.album || '',
+    albumId:t.artkey || '',
+    artistId:t.aartist || '',
+    albumArtist:t.aartist || '',
+    track:t.tn || 0,
+    duration:t.sec || 0,
+    coverArt:t.artkey ? ('local:'+t.artkey) : '',
+    loved:loved,
+    src:'local',
+    h:t.h
+  };
+  return t._song;
+}
+function songsListAccessor(){
+  var tracks=songsTracks||[];
+  return {
+    count:tracks.length,
+    get:function(i){ return (i>=0 && i<tracks.length)?songsTrackToSong(tracks[i]):null; },
+    all:function(){
+      var out=[], i;
+      for(i=0;i<tracks.length;i++) out.push(songsTrackToSong(tracks[i]));
+      return out;
+    }
+  };
 }
 /* Build steps for the All Songs view. The nine title-formatting passes are the bulk of the work
    and each is atomic, so they run one per tick rather than back to back; libTF memoises them, so
@@ -197,11 +221,6 @@ function setSongsGroup(g){
   if(g!==songsGroup){ songsGroup=g; songsRows=null; songsScroll=songsScrollT=0; }
   sgMenuOpen=false; repaintAll();
 }
-function playSongsRow(ti){
-  if(!songsTracks) return;
-  var hs=[]; for(var i=0;i<songsTracks.length;i++) hs.push(songsTracks[i].h);
-  playHandleList(hs,ti);
-}
 
 var plCacheMap={}, plMetaMap={};
 function getItems(pi){ if(!plCacheMap[pi]){ plCacheMap[pi]=plman.GetPlaylistItems(pi); } return plCacheMap[pi]; }
@@ -210,7 +229,9 @@ function getMeta(pi){
     var list=getItems(pi), secs=TF.lensec.EvalWithMetadbs(list), tot=0;
     for(var i=0;i<secs.length;i++) tot+=parseInt(secs[i],10)||0;
     plMetaMap[pi]={ title:TF.title.EvalWithMetadbs(list), artist:TF.artist.EvalWithMetadbs(list),
-                    album:TF.album.EvalWithMetadbs(list), len:TF.len.EvalWithMetadbs(list), artkey:TF.albkey.EvalWithMetadbs(list),
+                    artistName:TF.artistName.EvalWithMetadbs(list),
+                    album:TF.album.EvalWithMetadbs(list), len:TF.len.EvalWithMetadbs(list), lensec:secs,
+                    artkey:TF.albkey.EvalWithMetadbs(list), trackno:TF.trackno.EvalWithMetadbs(list),
                     totalSec:tot, keys:null };
   }
   return plMetaMap[pi];
@@ -220,15 +241,17 @@ function getMeta(pi){
    one per tick instead. plMetaMap is only published once every field is in, so a synchronous
    getMeta() elsewhere still sees either nothing or a complete record, never a half-built one. */
 function metaSteps(pi){
-  var list=null, m={title:null,artist:null,album:null,len:null,artkey:null,totalSec:0,keys:null};
+  var list=null, m={title:null,artist:null,artistName:null,album:null,len:null,lensec:null,artkey:null,trackno:null,totalSec:0,keys:null};
   return [
     function(){ list=getItems(pi); },
     function(){ m.title=TF.title.EvalWithMetadbs(list); },
     function(){ m.artist=TF.artist.EvalWithMetadbs(list); },
+    function(){ m.artistName=TF.artistName.EvalWithMetadbs(list); },
     function(){ m.album=TF.album.EvalWithMetadbs(list); },
     function(){ m.len=TF.len.EvalWithMetadbs(list); },
     function(){ m.artkey=TF.albkey.EvalWithMetadbs(list); },
-    function(){ var s=TF.lensec.EvalWithMetadbs(list), t=0, i; for(i=0;i<s.length;i++) t+=parseInt(s[i],10)||0; m.totalSec=t; },
+    function(){ m.trackno=TF.trackno.EvalWithMetadbs(list); },
+    function(){ var s=TF.lensec.EvalWithMetadbs(list), t=0, i; m.lensec=s; for(i=0;i<s.length;i++) t+=parseInt(s[i],10)||0; m.totalSec=t; },
     function(){ if(!plMetaMap[pi]) plMetaMap[pi]=m; }   // a sync getMeta() may have won the race
   ];
 }
@@ -236,15 +259,11 @@ function metaReady(pi){ return !!plMetaMap[pi]; }
 
 // jobs={} cancels any build in flight: jobStep finds no entry for its key and simply stops, so a
 // job that started against the old data can never publish it
-function invalidateItems(){ plCacheMap={}; plMetaMap={}; plCoverCache={}; coverPickCache={}; mosaicCache={}; warmed={}; plOrderMap={}; plNameCache={}; plCountCache={}; plCardCache={}; qMetaCache={}; visPlCache=null; warmJob=null; jobs={}; gates={}; rowGate={}; shelfHandles=null; }
+function invalidateItems(){
+  plCacheMap={}; plMetaMap={}; plCoverCache={}; coverPickCache={}; mosaicCache={}; warmed={}; plNameCache={}; plCountCache={}; qMetaCache={}; visPlCache=null; warmJob=null; jobs={}; gates={}; rowGate={}; shelfHandles=null;
+  if(typeof localOnItemsChanged==='function') localOnItemsChanged();
+}
 
-/* ---- Playlist view sort: only reorders how rows are DISPLAYED. Native item indices (playback,
-   row menu, drag targets) are untouched, so order[displayRow] maps to the real item index. */
-var plSort='artist', plSortDir='asc', plSortMenuOpen=false, PL_SORT_HB=[], HB_PLSORT=null, HB_PLSORTDIR=null;
-var PL_SORTS=[['Title','title'],['Artist','artist'],['Album','album']];
-var plOrderMap={};
-// Lowercase sort keys built once per playlist and reused across re-sorts, for the same reason as
-// the All Songs index: cmpStr would otherwise lowercase both operands on every comparison.
 function plKeys(pi){
   var meta=getMeta(pi);
   if(!meta.keys){
@@ -254,19 +273,3 @@ function plKeys(pi){
   }
   return meta.keys;
 }
-function buildPlOrder(pi){
-  var meta=getMeta(pi), k=plKeys(pi), n=meta.title.length, order=[], i;
-  for(i=0;i<n;i++) order.push(i);
-  if(plSort==='title') order.sort(function(a,b){ return cmpK(k.t[a],k.t[b])||cmpK(k.a[a],k.a[b]); });
-  else if(plSort==='album') order.sort(function(a,b){ return cmpK(k.l[a],k.l[b])||cmpK(k.a[a],k.a[b])||cmpK(k.t[a],k.t[b]); });
-  else order.sort(function(a,b){ return cmpK(k.a[a],k.a[b])||cmpK(k.l[a],k.l[b])||cmpK(k.t[a],k.t[b]); });
-  if(plSortDir==='desc') order.reverse();
-  return order;
-}
-function getPlOrder(pi){
-  var meta=getMeta(pi), n=meta.title.length, c=plOrderMap[pi];
-  if(!c || c.sort!==plSort || c.dir!==plSortDir || c.n!==n){ c={sort:plSort,dir:plSortDir,n:n,order:buildPlOrder(pi)}; plOrderMap[pi]=c; }
-  return c.order;
-}
-function setPlSort(s){ plSort=s; plSortMenuOpen=false; repaintAll(); }
-function togglePlSortDir(){ plSortDir=(plSortDir==='asc')?'desc':'asc'; repaintAll(); }

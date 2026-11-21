@@ -10,5 +10,9 @@ var TF = {
   albkey:fb.TitleFormat('%album artist% - %album%'), artistName:fb.TitleFormat('%album artist%'),
   year:fb.TitleFormat('$year(%date%)'), lensec:fb.TitleFormat('%length_seconds%'),
   trackno:fb.TitleFormat('%tracknumber%'),
+  addedOrMod:fb.TitleFormat('$if2([%added%],[%last_modified%])'),
+  playCount:fb.TitleFormat('[%play_count%]'),
+  lastPlayed:fb.TitleFormat('[%last_played%]'),
+  loved:fb.TitleFormat('[%'+LOVED_FIELD+'%]'),
   rg:fb.TitleFormat('$if(%replaygain_track_gain%,1,0)')   // '1' once a loudness scan has tagged the file
 };

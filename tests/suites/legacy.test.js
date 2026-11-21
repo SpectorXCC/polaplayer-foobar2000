@@ -14,7 +14,8 @@ function run() {
     makeHandleList,
     makeImage,
     makeGraphics,
-    flushOneHttp
+    flushOneHttp,
+    flushTimers
   } = createHarness();
 
   console.log('1. Startup & SQLite 011B/011C config parsing...');
@@ -58,7 +59,7 @@ function run() {
   console.log('3. Concurrent HTTP dispatch + catalog/playlist/album/artist/starred/random loading...');
   ctx.switchLibrarySource('navidrome');
   assert.strictEqual(ctx.libSource, 'navidrome');
-  assert.strictEqual(ctx.view, 'navidrome');
+  assert.strictEqual(ctx.view, 'browse');
   assert.strictEqual(state.panelsState.Navidrome.visible, false, 'Legacy Navidrome panel stays hidden by default');
   assert.strictEqual(state.panelsState.Lyrics.visible, false, 'Native Lyrics panel stays permanently hidden');
 
@@ -232,8 +233,8 @@ function run() {
     state.darkUi = isDark;
     ctx.on_colours_changed();
     for (const nv of ['home', 'albums', 'artists', 'playlist', 'album', 'artist', 'starred', 'random']) {
-      ctx.nvView = nv;
-      ctx.nvViewId = nv === 'playlist' ? 'pl-99' : (nv === 'album' ? 'al-9' : (nv === 'artist' ? 'ar-7' : ''));
+      ctx.brView = nv;
+      ctx.brViewId = nv === 'playlist' ? 'pl-99' : (nv === 'album' ? 'al-9' : (nv === 'artist' ? 'ar-7' : ''));
       ctx.on_paint(gr);
     }
     ctx.view = 'search';
@@ -241,7 +242,7 @@ function run() {
     ctx.NVData.search.requested = 'Test';
     ctx.NVData.search.songs = songs;
     ctx.on_paint(gr);
-    ctx.view = 'navidrome';
+    ctx.view = 'browse';
     ctx.fsMode = true;
     ctx.fsView = 'lyrics';
     ctx.on_paint(gr);
@@ -251,11 +252,11 @@ function run() {
   assert.ok(ctx.HB_QLY.length >= 3, 'Right-pane lyrics populated click-to-seek hitboxes');
   assert.strictEqual(state.panelsState.Lyrics.visible, false, 'Native Lyrics panel never shown');
 
-  ctx.nvOpenHome();
+  ctx.brOpenHome();
   ctx.on_paint(gr);
   assert.strictEqual(typeof ctx.nvOpenLegacy, 'undefined', 'Legacy panel opener removed');
   assert.strictEqual(typeof ctx.nvDrawLegacyView, 'undefined', 'Legacy view renderer removed');
-  assert.ok(!ctx.HB_NV_BTN.some(b => b.act === 'legacy'), 'Top strip has no legacy panel toggle button');
+  assert.ok(!ctx.HB_BR_BTN.some(b => b.act === 'legacy'), 'Top strip has no legacy panel toggle button');
   assert.strictEqual(state.panelsState.Navidrome.visible, false, 'Native Navidrome panel stays hidden');
 
   console.log('8. Cover download + async image load pipeline...');
@@ -290,7 +291,7 @@ function run() {
   ctx.on_mouse_wheel(-3);
   assert.ok(ctx.lyStScroll > prevStScroll, 'Right-pane unsynced lyrics should scroll on wheel');
 
-  ctx.nvOpenPlaylist('pl-99', 'Night Drive');
+  ctx.brOpenPlaylist('pl-99', 'Night Drive');
   flushOneHttp('getPlaylist.view', 200, {
     'subsonic-response': {
       status: 'ok',
@@ -298,18 +299,18 @@ function run() {
     }
   });
   ctx.on_paint(gr);
-  assert.ok(ctx.HB_NV_SORT_DD, 'Playlist sort dropdown pill present');
-  ctx.on_mouse_lbtn_up((ctx.HB_NV_SORT_DD.x0 + ctx.HB_NV_SORT_DD.x1) / 2, (ctx.HB_NV_SORT_DD.y0 + ctx.HB_NV_SORT_DD.y1) / 2);
-  assert.strictEqual(ctx.nvPlSortOpen, true);
+  assert.ok(ctx.HB_BR_SORT_DD, 'Playlist sort dropdown pill present');
+  ctx.on_mouse_lbtn_up((ctx.HB_BR_SORT_DD.x0 + ctx.HB_BR_SORT_DD.x1) / 2, (ctx.HB_BR_SORT_DD.y0 + ctx.HB_BR_SORT_DD.y1) / 2);
+  assert.strictEqual(ctx.brPlSortOpen, true);
   ctx.on_paint(gr);
-  const sortOpt = ctx.NV_SORT_DD_HB.find(o => o.v === 'title');
+  const sortOpt = ctx.BR_SORT_DD_HB.find(o => o.v === 'title');
   assert.ok(sortOpt);
   ctx.on_mouse_lbtn_up((sortOpt.x0 + sortOpt.x1) / 2, (sortOpt.y0 + sortOpt.y1) / 2);
-  assert.strictEqual(ctx.nvPlSort, 'title');
-  assert.strictEqual(ctx.nvPlSortOpen, false);
+  assert.strictEqual(ctx.brPlSort, 'title');
+  assert.strictEqual(ctx.brPlSortOpen, false);
 
-  assert.ok(ctx.HB_NV_ADDPL);
-  ctx.on_mouse_lbtn_up((ctx.HB_NV_ADDPL.x0 + ctx.HB_NV_ADDPL.x1) / 2, (ctx.HB_NV_ADDPL.y0 + ctx.HB_NV_ADDPL.y1) / 2);
+  assert.ok(ctx.HB_BR_ADDPL);
+  ctx.on_mouse_lbtn_up((ctx.HB_BR_ADDPL.x0 + ctx.HB_BR_ADDPL.x1) / 2, (ctx.HB_BR_ADDPL.y0 + ctx.HB_BR_ADDPL.y1) / 2);
   assert.ok(ctx.renameEdit && ctx.renameEdit.kind === 'nv-create');
   for (const ch of 'Synth') ctx.on_char(ch.charCodeAt(0));
   ctx.on_char(13);
@@ -324,9 +325,9 @@ function run() {
   assert.ok(sUrl.indexOf('star.view') >= 0 || sUrl.indexOf('unstar.view') >= 0);
   flushOneHttp('.view', 200, { 'subsonic-response': { status: 'ok' } });
 
-  ctx.nvOpenPlaylist('pl-99', 'Night Drive');
+  ctx.brOpenPlaylist('pl-99', 'Night Drive');
   ctx.on_paint(gr);
-  const trHit = ctx.HB_NV_TR[0];
+  const trHit = ctx.HB_BR_TR[0];
   assert.ok(trHit);
   assert.strictEqual(ctx.on_mouse_rbtn_up((trHit.x0 + trHit.x1) / 2, (trHit.y0 + trHit.y1) / 2), true);
   ctx.on_paint(gr);
@@ -406,21 +407,21 @@ function run() {
     ctx.NVData.playlistsLoaded = true;
     ctx.NVData.playlistsLoading = false;
 
-    ctx.view = 'navidrome';
+    ctx.view = 'browse';
     const mainR = ctx.R.main;
     const cropY = mainR.y + mainR.h;
     const pad = ctx.M.cpad;
-    const grid = ctx.nvDrawGridCols(mainR.w - pad * 2, 16, 176);
+    const grid = ctx.brDrawGridCols(mainR.w - pad * 2, 16, 176);
     const rowStep = grid.cardH + 8;
 
     function paintWithScrollCheck(nv, nvId, scrollVal, shelfVal, expectedClipY0, expectedClipY1, requireCardBlit) {
-      ctx.nvView = nv;
-      ctx.nvViewId = nvId || '';
-      ctx.nvScroll = scrollVal;
-      ctx.nvScrollT = scrollVal;
+      ctx.brView = nv;
+      ctx.brViewId = nvId || '';
+      ctx.brScroll = scrollVal;
+      ctx.brScrollT = scrollVal;
       if (shelfVal !== undefined) {
-        ctx.nvShelfScroll = shelfVal;
-        ctx.nvShelfScrollT = shelfVal;
+        ctx.brShelfScroll = shelfVal;
+        ctx.brShelfScrollT = shelfVal;
       }
       gr.drawImageCalls.length = 0;
       const cBefore = state.imgCreateCount;
@@ -444,32 +445,32 @@ function run() {
     }
 
     function warmView(nv, nvId) {
-      ctx.nvView = nv; ctx.nvViewId = nvId || '';
-      ctx.nvScroll = 0; ctx.nvScrollT = 0;
+      ctx.brView = nv; ctx.brViewId = nvId || '';
+      ctx.brScroll = 0; ctx.brScrollT = 0;
       ctx.on_paint(gr);
     }
 
-    ctx.clearNvCardCache();
+    ctx.clearBrCardCache();
     warmView('albums', '');
-    assert.ok(ctx.nvCardN > 0, 'Albums warm pass must populate whole-card bitmap cache');
+    assert.ok(ctx.brCardN > 0, 'Albums warm pass must populate whole-card bitmap cache');
     const albGy = mainR.y + 52 + 48;
     const albResTop = paintWithScrollCheck('albums', '', 45, undefined, albGy, cropY);
     assert.ok(albResTop.mainCalls.length > 0, 'Albums partial scroll must blit cached/sliced card images');
     const albResWarm = paintWithScrollCheck('albums', '', 44, undefined, albGy, cropY);
     assert.strictEqual(albResWarm.created, 0, 'Warm albums scroll must allocate zero new card bitmaps');
     assert.strictEqual(albResWarm.disposed, 0, 'Warm albums scroll must dispose zero cached card bitmaps');
-    const alb0 = ctx.HB_NV_CARDS.find(c => c.id === 'scroll-al-0');
+    const alb0 = ctx.HB_BR_CARDS.find(c => c.id === 'scroll-al-0');
     assert.ok(alb0, 'Albums top-straddling card scroll-al-0 must remain present when scrolled 44px');
     assert.strictEqual(alb0.y0, albGy, 'Albums top-straddling card hitbox starts cleanly at gy');
     assert.ok(alb0.y1 > alb0.y0 && (alb0.y1 - alb0.y0) < grid.cardH, 'Albums top-straddling card has partial clipped height');
-    const bottomClipAlb = ctx.HB_NV_CARDS.filter(c => c.y1 === cropY && (c.y1 - c.y0) < grid.cardH);
+    const bottomClipAlb = ctx.HB_BR_CARDS.filter(c => c.y1 === cropY && (c.y1 - c.y0) < grid.cardH);
     assert.ok(bottomClipAlb.length > 0, 'Albums view renders bottom-straddling cards up to cropY instead of hiding them');
 
     const totalRows = Math.ceil(synthAlbums.length / grid.cols);
     const moreScroll = totalRows * rowStep + 8 - (cropY - albGy - 18);
-    if (moreScroll > 0 && moreScroll <= ctx.NV_MAXPX) {
+    if (moreScroll > 0 && moreScroll <= ctx.BR_MAXPX) {
       paintWithScrollCheck('albums', '', moreScroll, undefined, albGy, cropY, false);
-      const moreBtn = ctx.HB_NV_BTN.find(b => b.act === 'more-albums');
+      const moreBtn = ctx.HB_BR_BTN.find(b => b.act === 'more-albums');
       assert.ok(moreBtn, 'Load more albums button remains rendered when half clipped at cropY');
       assert.strictEqual(moreBtn.y1, cropY, 'Load more albums button hitbox is clamped at cropY');
       assert.ok(moreBtn.y0 < cropY && moreBtn.y0 >= albGy, 'Load more albums button top lies above cropY');
@@ -482,18 +483,18 @@ function run() {
     const artResWarm = paintWithScrollCheck('artists', '', 44, undefined, artGy, cropY);
     assert.strictEqual(artResWarm.created, 0, 'Warm artists scroll must allocate zero new card bitmaps');
     assert.strictEqual(artResWarm.disposed, 0, 'Warm artists scroll must dispose zero cached card bitmaps');
-    const ar0 = ctx.HB_NV_CARDS.find(c => c.id === 'scroll-ar-0');
+    const ar0 = ctx.HB_BR_CARDS.find(c => c.id === 'scroll-ar-0');
     assert.ok(ar0, 'Artists top-straddling card scroll-ar-0 must remain present when scrolled 44px');
     assert.strictEqual(ar0.y0, artGy, 'Artists top-straddling card hitbox starts cleanly at gy');
     assert.ok(ar0.y1 > ar0.y0 && (ar0.y1 - ar0.y0) < grid.cardH, 'Artists top-straddling card has partial clipped height');
-    const bottomClipArt = ctx.HB_NV_CARDS.filter(c => c.y1 === cropY && (c.y1 - c.y0) < grid.cardH);
+    const bottomClipArt = ctx.HB_BR_CARDS.filter(c => c.y1 === cropY && (c.y1 - c.y0) < grid.cardH);
     assert.ok(bottomClipArt.length > 0, 'Artists view renders bottom-straddling cards up to cropY instead of hiding them');
 
     warmView('artist', 'scroll-ar-0');
     const detBodyTop = mainR.y + 228 + 8;
     paintWithScrollCheck('artist', 'scroll-ar-0', 55, undefined, detBodyTop, cropY, false);
-    assert.ok(ctx.HB_NV_TR.length > 0, 'Artist detail keeps visible top tracks when scrolled 55px');
-    for (const th of ctx.HB_NV_TR) {
+    assert.ok(ctx.HB_BR_TR.length > 0, 'Artist detail keeps visible top tracks when scrolled 55px');
+    for (const th of ctx.HB_BR_TR) {
       assert.ok(th.y0 >= detBodyTop && th.y1 <= cropY, 'Artist detail track hitbox clamped inside [bodyTop, cropY]');
     }
     const topH = 40 + 5 * 50 + 24;
@@ -502,35 +503,35 @@ function run() {
     assert.ok(detCardRes.mainCalls.length > 0, 'Artist detail album grid partial scroll blits cached card slices');
     const detCardWarm = paintWithScrollCheck('artist', 'scroll-ar-0', detCardScroll - 1, undefined, detBodyTop, cropY);
     assert.strictEqual(detCardWarm.created, 0, 'Warm artist album grid scroll allocates zero new card bitmaps');
-    const detAl0 = ctx.HB_NV_CARDS.find(c => c.id === 'scroll-al-0');
+    const detAl0 = ctx.HB_BR_CARDS.find(c => c.id === 'scroll-al-0');
     assert.ok(detAl0, 'Artist detail top-straddling album card remains present');
     assert.strictEqual(detAl0.y0, detBodyTop, 'Artist detail top-straddling album card starts at bodyTop');
 
-    ctx.nvShelfScroll = 0; ctx.nvShelfScrollT = 0;
+    ctx.brShelfScroll = 0; ctx.brShelfScrollT = 0;
     warmView('home', '');
     const homeRes = paintWithScrollCheck('home', '', 45, 45);
     assert.ok(homeRes.mainCalls.length > 0, 'Home view partial vertical & horizontal scroll blits cached card slices');
     const homeResWarm = paintWithScrollCheck('home', '', 44, 44);
     assert.strictEqual(homeResWarm.created, 0, 'Warm Home view scroll allocates zero new card bitmaps');
-    const homePl0 = ctx.HB_NV_CARDS.find(c => c.id === 'scroll-pl-0');
+    const homePl0 = ctx.HB_BR_CARDS.find(c => c.id === 'scroll-pl-0');
     assert.ok(homePl0, 'Home playlist card 0 remains present when horizontally scrolled 44px');
     assert.strictEqual(homePl0.x0, mainR.x + pad, 'Home horizontally clipped card starts cleanly at shelf x0');
-    ctx.nvScroll = 0; ctx.nvScrollT = 0; ctx.nvShelfScroll = 0; ctx.nvShelfScrollT = 0;
+    ctx.brScroll = 0; ctx.brScrollT = 0; ctx.brShelfScroll = 0; ctx.brShelfScrollT = 0;
 
-    assert.ok(ctx.nvCardN > 0, 'Expected cached Navidrome cards prior to clear');
-    const liveCachedBefore = ctx.nvCardN;
+    assert.ok(ctx.brCardN > 0, 'Expected cached browse cards prior to clear');
+    const liveCachedBefore = ctx.brCardN;
     const dispBefore = state.imgDisposeCount;
     ctx.clearDisplayCaches();
-    assert.strictEqual(ctx.nvCardN, 0, 'clearDisplayCaches() must flush nvCardCache');
+    assert.strictEqual(ctx.brCardN, 0, 'clearDisplayCaches() must flush brCardCache');
     assert.ok(state.imgDisposeCount - dispBefore >= liveCachedBefore, 'clearDisplayCaches() must dispose every cached card bitmap');
     warmView('albums', '');
-    const cachedThemeCount = ctx.nvCardN;
-    assert.ok(cachedThemeCount > 0, 'Re-warmed albums populate nvCardCache');
+    const cachedThemeCount = ctx.brCardN;
+    assert.ok(cachedThemeCount > 0, 'Re-warmed albums populate brCardCache');
     const dispThemeBefore = state.imgDisposeCount;
     const prevDark = state.darkUi;
     state.darkUi = !prevDark;
     assert.strictEqual(ctx.syncTheme(), true, 'syncTheme() detects theme mode switch');
-    assert.strictEqual(ctx.nvCardN, 0, 'syncTheme() must flush theme-baked nvCardCache bitmaps');
+    assert.strictEqual(ctx.brCardN, 0, 'syncTheme() must flush theme-baked brCardCache bitmaps');
     assert.ok(state.imgDisposeCount - dispThemeBefore >= cachedThemeCount, 'syncTheme() must dispose cached card bitmaps');
     state.darkUi = prevDark;
     ctx.syncTheme();
@@ -547,8 +548,9 @@ function run() {
 
     ctx.fsMode = false;
     ctx.volumePopupOpen = false;
-    ctx.nvAlbTabOpen = false;
-    ctx.view = 'home';
+    ctx.brAlbTabOpen = false;
+    ctx.view = 'browse';
+    ctx.brView = 'home';
     ctx.dirtyAll = true;
     ctx.on_paint(gr);
 
@@ -560,16 +562,17 @@ function run() {
     assert.strictEqual(state.repaintRectCalls[0].y, ctx.px(ctx.R.barY), 'Bar RepaintRect starts at R.barY');
     ctx.on_paint(gr);
 
-    ctx.HB_DOTS = [{ x0: 500, y0: 500, x1: 520, y1: 520, pl: 0, mx: 500, my: 500 }];
+    ctx.HB_BR_CARDS = [{ x0: 500, y0: 500, x1: 520, y1: 520, kind: 'album', id: 'dummy', title: 'Dummy' }];
     state.repaintFullCount = 0;
     state.repaintRectCalls.length = 0;
     ctx.repaintNav();
     assert.strictEqual(state.repaintFullCount, 0, 'repaintNav() must use partial RepaintRect');
     assert.strictEqual(state.repaintRectCalls.length, 1, 'repaintNav() invalidates R.navLib rect');
     ctx.on_paint(gr);
-    assert.strictEqual(ctx.HB_DOTS.length, 1, 'dirtyNav-only partial paint must NOT wipe main-panel HB_DOTS');
+    assert.strictEqual(ctx.HB_BR_CARDS.length, 1, 'dirtyNav-only partial paint must NOT wipe main-panel HB_BR_CARDS');
 
-    ctx.view = 'home';
+    ctx.view = 'browse';
+    ctx.brView = 'home';
     state.repaintFullCount = 0;
     state.repaintRectCalls.length = 0;
     ctx.repaintMain();
@@ -577,7 +580,9 @@ function run() {
     assert.strictEqual(state.repaintRectCalls.length, 1, 'home view clips cleanly inside R.main without bar bleed repaint');
     ctx.on_paint(gr);
 
-    ctx.view = 'playlist';
+    ctx.view = 'browse';
+    ctx.brView = 'playlist';
+    ctx.brViewId = '0';
     state.repaintFullCount = 0;
     state.repaintRectCalls.length = 0;
     ctx.repaintMain();
@@ -594,7 +599,8 @@ function run() {
     ctx.volumePopupOpen = false;
     ctx.on_paint(gr);
 
-    ctx.view = 'home';
+    ctx.view = 'browse';
+    ctx.brView = 'home';
     ctx.on_paint(gr);
     const homeBtn = ctx.HB_HOME;
     assert.ok(homeBtn);
@@ -605,16 +611,21 @@ function run() {
     assert.ok(state.repaintRectCalls.length >= 1, 'hoverZone change queues zone RepaintRect');
     ctx.on_paint(gr);
 
-    ctx.view = 'artist';
-    ctx.ART_MAXBLOCK = 500;
-    ctx.artScroll = 100;
+    ctx.view = 'browse';
+    ctx.brView = 'artist';
+    ctx.brViewId = 'Local Artist';
     ctx.on_paint(gr);
+    ctx.BR_MAXPX = 500;
+    ctx.brScroll = 100;
+    ctx.brScrollT = 100;
     ctx.on_mouse_move(ctx.R.main.x + 20, ctx.R.main.y + 40);
     state.repaintFullCount = 0;
     state.repaintRectCalls.length = 0;
     ctx.on_mouse_wheel(-1);
+    flushTimers(ctx.ANIM_MS);
     assert.strictEqual(state.repaintFullCount, 0, 'Artist wheel scroll uses partial repaintMain() instead of repaintAll()');
     assert.ok(state.repaintRectCalls.length >= 1, 'Artist wheel scroll issues RepaintRect');
+    ctx.stopScrollAnim();
     ctx.on_paint(gr);
 
     ctx.view = 'songs';
@@ -914,7 +925,7 @@ function run() {
     assert.strictEqual(lh, 22);
     assert.strictEqual(grFont.calcTextHeightCalls[0].text, 'Ag\u6b4c');
 
-    ctx.view = 'navidrome';
+    ctx.view = 'browse';
     ctx.NV.key = ctx.nvTrackKey();
     ctx.NV.status = 'ready';
     ctx.NV.lyrics = {
@@ -944,10 +955,10 @@ function run() {
   console.log('15. Fullscreen lifecycle: window restore, Esc DlgCode, click/menu & hoverSig isolation...');
   {
     const grFs = makeGraphics();
-    ctx.view = 'navidrome';
-    ctx.nvView = 'albums';
+    ctx.view = 'browse';
+    ctx.brView = 'albums';
     ctx.on_paint(grFs);
-    assert.ok(ctx.HB_NV_CARDS.length > 0, 'Normal view populated HB_NV_CARDS');
+    assert.ok(ctx.HB_BR_CARDS.length > 0, 'Normal view populated HB_BR_CARDS');
     assert.ok(ctx.HB_MENU.length > 0 && ctx.HB_CAP, 'Normal view populated titlebar hitboxes');
 
     uiWizardMock.WindowState = 0;
@@ -957,7 +968,7 @@ function run() {
     assert.strictEqual(uiWizardMock.WindowState, 1, 'enterFullscreen maximizes normal window');
     assert.strictEqual(sandbox.window.DlgCode, sandbox.DLGC_WANTALLKEYS, 'enterFullscreen sets DLGC_WANTALLKEYS for Esc');
     assert.strictEqual(ctx.sgMenuOpen, false, 'enterFullscreen dismisses lingering normal dropdowns');
-    assert.strictEqual(ctx.HB_NV_CARDS.length, 0, 'enterFullscreen clears stale HB_NV_CARDS');
+    assert.strictEqual(ctx.HB_BR_CARDS.length, 0, 'enterFullscreen clears stale HB_BR_CARDS');
     assert.strictEqual(ctx.HB_MENU.length, 0, 'enterFullscreen clears stale HB_MENU');
     assert.strictEqual(ctx.HB_CAP, null, 'enterFullscreen clears stale HB_CAP');
 
@@ -969,9 +980,8 @@ function run() {
     assert.ok(ctx.hoverSig((firstFs.x0 + firstFs.x1) / 2, (firstFs.y0 + firstFs.y1) / 2).startsWith('f'));
     assert.ok(ctx.hoverSig((firstCtrl.x0 + firstCtrl.x1) / 2, (firstCtrl.y0 + firstCtrl.y1) / 2).startsWith('fc'));
 
-    ctx.HB_TR = [{ pl: 0, item: 0, x0: 300, y0: 300, x1: 500, y1: 350 }];
-    ctx.HB_NV_TR = [{ info: { list: [], idx: 0, sourceMeta: {} }, x0: 300, y0: 300, x1: 500, y1: 350 }];
-    ctx.HB_NV_TRDOTS = [{ info: {}, x0: 460, y0: 305, x1: 490, y1: 335, mx: 460, my: 335 }];
+    ctx.HB_BR_TR = [{ info: { list: [], idx: 0, sourceMeta: {} }, x0: 300, y0: 300, x1: 500, y1: 350 }];
+    ctx.HB_BR_TRDOTS = [{ info: {}, x0: 460, y0: 305, x1: 490, y1: 335, mx: 460, my: 335 }];
     ctx.HB_SG = { x0: 200, y0: 200, x1: 280, y1: 240 };
     ctx.HB_CAP = { minX: 1300, maxX: 1346, closeX: 1392, bw: 46 };
     ctx.HB_MENU = [{ x0: 12, y0: 0, x1: 60, y1: 32, root: 'file', mx: 12 }];
@@ -983,7 +993,7 @@ function run() {
     ctx.on_mouse_lbtn_up(ctx.px(240), ctx.px(220));
     assert.strictEqual(ctx.sgMenuOpen, false, 'Left-click over phantom HB_SG does not open normal dropdown');
     ctx.on_mouse_lbtn_up(ctx.px(475), ctx.px(320));
-    assert.strictEqual(ctx.ctxMenu, null, 'Left-click over phantom HB_NV_TRDOTS does not open normal track menu');
+    assert.strictEqual(ctx.ctxMenu, null, 'Left-click over phantom HB_BR_TRDOTS does not open normal track menu');
 
     assert.strictEqual(ctx.hoverSig(24, 16), '', 'hoverSig over old TBH menu returns empty string in fullscreen');
     assert.strictEqual(ctx.hoverSig(1320, 16), '', 'hoverSig over old caption buttons returns empty string in fullscreen');
@@ -1113,31 +1123,31 @@ function run() {
 
     assert.strictEqual(ctx.THEME_LIGHT.cardHov, ctx.RGB(228, 229, 235), 'THEME_LIGHT.cardHov darkened to RGB(228,229,235) for clearer hover contrast');
 
-    ctx.clearNvCardCache();
-    const cachedNvAlb = ctx.nvCardImg('album', 'ct-al-1', 176, '', 'ct-al-1', false);
-    assert.ok(cachedNvAlb, 'nvCardImg builds offscreen album card shell bitmap');
+    ctx.clearBrCardCache();
+    const cachedNvAlb = ctx.brCardImg('album', 'ct-al-1', 176, '', 'ct-al-1', false);
+    assert.ok(cachedNvAlb, 'brCardImg builds offscreen album card shell bitmap');
     assert.strictEqual(cachedNvAlb._gdiDrawTextOps.length, 0, 'Cached Navidrome album shell performs zero GdiDrawText calls');
     assert.strictEqual(cachedNvAlb._drawStringOps.length, 0, 'Cached Navidrome album shell performs zero DrawString calls');
 
-    const cachedNvArt = ctx.nvCardImg('artist', 'ct-ar-1', 176, '', 'ct-ar-1', true);
-    assert.ok(cachedNvArt, 'nvCardImg builds offscreen artist card shell bitmap');
+    const cachedNvArt = ctx.brCardImg('artist', 'ct-ar-1', 176, '', 'ct-ar-1', true);
+    assert.ok(cachedNvArt, 'brCardImg builds offscreen artist card shell bitmap');
     assert.strictEqual(cachedNvArt._gdiDrawTextOps.length, 0, 'Cached Navidrome artist shell performs zero GdiDrawText calls');
     assert.strictEqual(cachedNvArt._drawStringOps.length, 0, 'Cached Navidrome artist shell performs zero DrawString calls');
 
-    const cachedLocalPl = ctx.renderPlCard(0, 176, false);
-    assert.ok(cachedLocalPl, 'renderPlCard builds offscreen local playlist card shell bitmap');
+    const cachedLocalPl = ctx.brCardImg('pl', '0', 176, 'localpl:0', 'pl0', false);
+    assert.ok(cachedLocalPl, 'brCardImg builds offscreen local playlist card shell bitmap');
     assert.strictEqual(cachedLocalPl._gdiDrawTextOps.length, 0, 'Cached local playlist shell performs zero GdiDrawText calls');
     assert.strictEqual(cachedLocalPl._drawStringOps.length, 0, 'Cached local playlist shell performs zero DrawString calls');
 
-    const cachedLocalArt = ctx.artCardImg({ name: 'Mock Local Artist', handle: null }, 176);
-    assert.ok(cachedLocalArt, 'artCardImg builds offscreen local artist card shell bitmap');
+    const cachedLocalArt = ctx.brCardImg('artist', 'Mock Local Artist', 176, 'localar:Mock Local Artist', 'Mock Local Artist', false);
+    assert.ok(cachedLocalArt, 'brCardImg builds offscreen local artist card shell bitmap');
     assert.strictEqual(cachedLocalArt._gdiDrawTextOps.length, 0, 'Cached local artist shell performs zero GdiDrawText calls');
     assert.strictEqual(cachedLocalArt._drawStringOps.length, 0, 'Cached local artist shell performs zero DrawString calls');
 
     const grUnhov = makeGraphics();
     ctx.mx = -1;
     ctx.my = -1;
-    ctx.nvDrawCard(grUnhov, 250, 200, 176, '', 'hov-seed', 'Normal Album', 'Normal Sub', false, 'album', 'norm-1', {});
+    ctx.brDrawCard(grUnhov, 250, 200, 176, '', 'hov-seed', 'Normal Album', 'Normal Sub', false, 'album', 'norm-1', {});
     assert.strictEqual(grUnhov.textHintCalls.length, 0, 'Live unhovered Navidrome card never touches GDI+ TextRenderingHint');
     assert.strictEqual(grUnhov.drawStringCalls.length, 0, 'Live unhovered Navidrome card never uses DrawString');
     assert.strictEqual(grUnhov.gdiDrawTextCalls.length, 2, 'Live unhovered Navidrome card draws title & sub via Win32 GdiDrawText');
@@ -1147,7 +1157,7 @@ function run() {
     const grHov = makeGraphics();
     ctx.mx = 260;
     ctx.my = 220;
-    ctx.nvDrawCard(grHov, 250, 200, 176, '', 'hov-seed', 'Hover Album', 'Hover Sub', false, 'album', 'hov-1', {});
+    ctx.brDrawCard(grHov, 250, 200, 176, '', 'hov-seed', 'Hover Album', 'Hover Sub', false, 'album', 'hov-1', {});
     assert.strictEqual(grHov.textHintCalls.length, 0, 'Hovered live Navidrome card never uses ClearTypeGridFit(5)');
     assert.strictEqual(grHov.drawStringCalls.length, 0);
     assert.strictEqual(grHov.gdiDrawTextCalls.length, 2, 'Hovered live Navidrome card draws title & sub via Win32 GdiDrawText');
@@ -1156,18 +1166,18 @@ function run() {
     assert.ok(grHov.fillRoundRectCalls.some(c => c.col === ctx.COL.cardHov), 'Hovered card shell fills with COL.cardHov');
 
     const grLocal = makeGraphics();
-    ctx.drawPlaylistCard(grLocal, 250, 200, 176, 0, 250, 500);
+    ctx.brDrawCard(grLocal, 250, 200, 176, 'localpl:0', 'pl0', ctx.plName(0), ctx.plCount(0) + ' songs', false, 'pl', '0', { id: '0', name: ctx.plName(0) }, false, 250, 500);
     const plTitleCall = grLocal.gdiDrawTextCalls.find(c => c.str === ctx.plName(0));
     const plSubCall = grLocal.gdiDrawTextCalls.find(c => c.str === ctx.plCount(0) + ' songs');
-    assert.ok(plTitleCall && plSubCall, 'drawPlaylistCard renders title & sub via live GdiDrawText');
+    assert.ok(plTitleCall && plSubCall, 'brDrawCard renders local playlist title & sub via live GdiDrawText');
     assert.strictEqual(plTitleCall.col, ctx.COL.green, 'Hovered local playlist card title uses COL.green');
     assert.strictEqual(plSubCall.col, ctx.COL.text, 'Hovered local playlist card subtitle uses COL.text');
 
     const grArt = makeGraphics();
-    ctx.drawArtistCard(grArt, 250, 200, 176, { name: 'Mock Local Artist', handle: null }, 200, 500);
+    ctx.brDrawCard(grArt, 250, 200, 176, 'localar:Mock Local Artist', 'Mock Local Artist', 'Mock Local Artist', 'Artist', true, 'artist', 'Mock Local Artist', {}, false, 200, 500);
     const artTitleCall = grArt.gdiDrawTextCalls.find(c => c.str === 'Mock Local Artist');
     const artSubCall = grArt.gdiDrawTextCalls.find(c => c.str === 'Artist');
-    assert.ok(artTitleCall && artSubCall, 'drawArtistCard renders title & sub via live GdiDrawText');
+    assert.ok(artTitleCall && artSubCall, 'brDrawCard renders local artist title & sub via live GdiDrawText');
     assert.strictEqual(artTitleCall.col, ctx.COL.green, 'Hovered local artist card title uses COL.green');
     assert.strictEqual(artSubCall.col, ctx.COL.text, 'Hovered local artist card subtitle uses COL.text');
     ctx.mx = -1;
@@ -1186,14 +1196,14 @@ function run() {
     assert.ok(grClipB.gdiDrawTextCalls[0].y + grClipB.gdiDrawTextCalls[0].h <= 364, 'Bottom-clipped tCard fits strictly above clipB');
 
     const grLeftClip = makeGraphics();
-    ctx.nvDrawCard(grLeftClip, 250, 200, 176, '', 'lc-seed', 'Left Clipped Album', 'Left Clipped Sub', false, 'album', 'lc-1', {}, false, 290, 600, 200, 450);
+    ctx.brDrawCard(grLeftClip, 250, 200, 176, '', 'lc-seed', 'Left Clipped Album', 'Left Clipped Sub', false, 'album', 'lc-1', {}, false, 290, 600, 200, 450);
     const scratch1 = ctx.cardTextScratch;
     assert.ok(scratch1 && !scratch1._disposed, 'Left-clipped shelf card allocates reusable cardTextScratch');
     assert.strictEqual(scratch1._gdiDrawTextOps.length, 0);
     assert.strictEqual(scratch1._drawStringOps.length, 2);
     assert.deepStrictEqual(scratch1._textHintOps.slice(-4), [4, 0, 4, 0], 'Left-clipped scratch strip uses grayscale AntiAlias(4), never ClearTypeGridFit(5)');
     const createBeforeWarmLc = state.imgCreateCount;
-    ctx.nvDrawCard(makeGraphics(), 252, 200, 176, '', 'lc-seed', 'Left Clipped Album', 'Left Clipped Sub', false, 'album', 'lc-1', {}, false, 290, 600, 200, 450);
+    ctx.brDrawCard(makeGraphics(), 252, 200, 176, '', 'lc-seed', 'Left Clipped Album', 'Left Clipped Sub', false, 'album', 'lc-1', {}, false, 290, 600, 200, 450);
     assert.strictEqual(state.imgCreateCount, createBeforeWarmLc, 'Warm left-clipped shelf redraw reuses cardTextScratch with 0 bitmap allocations');
 
     sandbox.window.DPI = 120;
@@ -1202,10 +1212,10 @@ function run() {
     ctx.checkDisplay(true);
     assert.strictEqual(ctx.UISCALE, 1.25, 'DPI=120 sets fractional UISCALE=1.25');
     assert.strictEqual(scratch1._disposed, true, 'clearDisplayCaches inside checkDisplay disposes cardTextScratch');
-    ctx.view = 'navidrome';
-    ctx.nvView = 'albums';
-    ctx.nvScroll = 44;
-    ctx.nvScrollT = 44;
+    ctx.view = 'browse';
+    ctx.brView = 'albums';
+    ctx.brScroll = 44;
+    ctx.brScrollT = 44;
     ctx.on_paint(makeGraphics());
     const grDpi = makeGraphics();
     ctx.on_paint(grDpi);
@@ -1225,26 +1235,26 @@ function run() {
     ctx.checkDisplay(true);
     assert.strictEqual(ctx.UISCALE, 1, 'Restored DPI=96 returns UISCALE=1');
 
-    ctx.view = 'navidrome';
-    ctx.nvView = 'albums';
+    ctx.view = 'browse';
+    ctx.brView = 'albums';
     ctx.NVData.albumsTab = 'recent';
-    ctx.nvAlbTabOpen = false;
-    ctx.nvPlSortOpen = false;
-    ctx.nvSrvMenuOpen = false;
+    ctx.brAlbTabOpen = false;
+    ctx.brPlSortOpen = false;
+    ctx.brSrvMenuOpen = false;
     ctx.on_paint(makeGraphics());
-    assert.ok(ctx.HB_NV_ALB_DD, 'Albums view populates HB_NV_ALB_DD pill hitbox');
+    assert.ok(ctx.HB_BR_ALB_DD, 'Albums view populates HB_BR_ALB_DD pill hitbox');
 
-    const pillCx = (ctx.HB_NV_ALB_DD.x0 + ctx.HB_NV_ALB_DD.x1) / 2;
-    const pillCy = (ctx.HB_NV_ALB_DD.y0 + ctx.HB_NV_ALB_DD.y1) / 2;
+    const pillCx = (ctx.HB_BR_ALB_DD.x0 + ctx.HB_BR_ALB_DD.x1) / 2;
+    const pillCy = (ctx.HB_BR_ALB_DD.y0 + ctx.HB_BR_ALB_DD.y1) / 2;
     ctx.on_mouse_lbtn_up(ctx.px(pillCx), ctx.px(pillCy));
-    assert.strictEqual(ctx.nvAlbTabOpen, true, 'Clicking HB_NV_ALB_DD opens albums tab dropdown');
+    assert.strictEqual(ctx.brAlbTabOpen, true, 'Clicking HB_BR_ALB_DD opens albums tab dropdown');
 
     const grDd = makeGraphics();
     ctx.on_paint(grDd);
     assert.deepStrictEqual(
-      Array.from(ctx.NV_ALB_DD_HB, h => h.v),
+      Array.from(ctx.BR_ALB_DD_HB, h => h.v),
       ['recent', 'newest', 'frequent', 'random', 'alphabeticalByName'],
-      'NV_ALB_DD_HB lists all 5 Navidrome album tabs'
+      'BR_ALB_DD_HB lists all 5 Navidrome album tabs'
     );
     const menuBgDraws = grDd.fillRoundRectCalls.filter(c => c.col === ctx.COL.menu);
     const menuShadowDraws = grDd.fillSolidRectCalls.filter(c => c.col === ctx.COL.shadow);
@@ -1253,27 +1263,27 @@ function run() {
 
     ctx.mx = ctx.px(ctx.R.main.x + 300);
     ctx.my = ctx.px(ctx.R.main.y + 300);
-    ctx.nvScroll = 30;
-    ctx.nvScrollT = 30;
+    ctx.brScroll = 30;
+    ctx.brScrollT = 30;
     ctx.on_mouse_wheel(-1);
-    assert.strictEqual(ctx.nvScrollT, 30, 'Wheel does not scroll album grid while nvAlbTabOpen is open');
+    assert.strictEqual(ctx.brScrollT, 30, 'Wheel does not scroll album grid while brAlbTabOpen is open');
 
     for (const targetTab of ['newest', 'frequent', 'alphabeticalByName', 'random']) {
       delete ctx.NVData.albumsByTab[targetTab];
-      if (!ctx.nvAlbTabOpen) {
+      if (!ctx.brAlbTabOpen) {
         ctx.on_mouse_lbtn_up(ctx.px(pillCx), ctx.px(pillCy));
         ctx.on_paint(makeGraphics());
       }
-      ctx.nvScroll = 42;
-      ctx.nvScrollT = 42;
-      const itemHb = ctx.NV_ALB_DD_HB.find(h => h.v === targetTab);
+      ctx.brScroll = 42;
+      ctx.brScrollT = 42;
+      const itemHb = ctx.BR_ALB_DD_HB.find(h => h.v === targetTab);
       assert.ok(itemHb, 'Found dropdown item hitbox for ' + targetTab);
       state.httpQueue.length = 0;
       ctx.on_mouse_lbtn_up(ctx.px((itemHb.x0 + itemHb.x1) / 2), ctx.px((itemHb.y0 + itemHb.y1) / 2));
-      assert.strictEqual(ctx.nvAlbTabOpen, false, 'Selecting ' + targetTab + ' closes nvAlbTabOpen');
+      assert.strictEqual(ctx.brAlbTabOpen, false, 'Selecting ' + targetTab + ' closes brAlbTabOpen');
       assert.strictEqual(ctx.NVData.albumsTab, targetTab, 'NVData.albumsTab switches to ' + targetTab);
-      assert.strictEqual(ctx.nvViewId, targetTab, 'nvViewId updates to ' + targetTab);
-      assert.strictEqual(ctx.nvScroll, 0, 'Selecting ' + targetTab + ' resets nvScroll');
+      assert.strictEqual(ctx.brViewId, targetTab, 'brViewId updates to ' + targetTab);
+      assert.strictEqual(ctx.brScroll, 0, 'Selecting ' + targetTab + ' resets brScroll');
       const req = flushOneHttp('getAlbumList2', 200, {
         'subsonic-response': {
           status: 'ok',
@@ -1287,7 +1297,7 @@ function run() {
 
     ctx.on_mouse_lbtn_up(ctx.px(pillCx), ctx.px(pillCy));
     ctx.on_paint(makeGraphics());
-    const freqHb = ctx.NV_ALB_DD_HB.find(h => h.v === 'frequent');
+    const freqHb = ctx.BR_ALB_DD_HB.find(h => h.v === 'frequent');
     state.httpQueue.length = 0;
     ctx.on_mouse_lbtn_up(ctx.px((freqHb.x0 + freqHb.x1) / 2), ctx.px((freqHb.y0 + freqHb.y1) / 2));
     assert.strictEqual(ctx.NVData.albumsTab, 'frequent');
@@ -1295,7 +1305,7 @@ function run() {
 
     ctx.on_mouse_lbtn_up(ctx.px(pillCx), ctx.px(pillCy));
     ctx.on_paint(makeGraphics());
-    const randHb = ctx.NV_ALB_DD_HB.find(h => h.v === 'random');
+    const randHb = ctx.BR_ALB_DD_HB.find(h => h.v === 'random');
     state.httpQueue.length = 0;
     ctx.on_mouse_lbtn_up(ctx.px((randHb.x0 + randHb.x1) / 2), ctx.px((randHb.y0 + randHb.y1) / 2));
     const reqRand2 = flushOneHttp('getAlbumList2', 200, {
@@ -1305,20 +1315,20 @@ function run() {
 
     ctx.on_mouse_lbtn_up(ctx.px(pillCx), ctx.px(pillCy));
     ctx.on_paint(makeGraphics());
-    const newestHb = ctx.NV_ALB_DD_HB.find(h => h.v === 'newest');
+    const newestHb = ctx.BR_ALB_DD_HB.find(h => h.v === 'newest');
     ctx.ctxMenu = null;
-    ctx.HB_NV_TRDOTS = [{ info: { list: [], idx: 0, sourceMeta: {} }, x0: newestHb.x0, y0: newestHb.y0, x1: newestHb.x1, y1: newestHb.y1, mx: newestHb.x0, my: newestHb.y1 }];
+    ctx.HB_BR_TRDOTS = [{ info: { list: [], idx: 0, sourceMeta: {} }, x0: newestHb.x0, y0: newestHb.y0, x1: newestHb.x1, y1: newestHb.y1, mx: newestHb.x0, my: newestHb.y1 }];
     ctx.on_mouse_lbtn_up(ctx.px((newestHb.x0 + newestHb.x1) / 2), ctx.px((newestHb.y0 + newestHb.y1) / 2));
-    assert.strictEqual(ctx.ctxMenu, null, 'nvAlbTabOpen beats overlapping HB_NV_TRDOTS instead of opening track menu');
+    assert.strictEqual(ctx.ctxMenu, null, 'brAlbTabOpen beats overlapping HB_BR_TRDOTS instead of opening track menu');
     assert.strictEqual(ctx.NVData.albumsTab, 'newest');
 
-    ctx.nvPlSort = 'default';
-    ctx.nvPlSortOpen = true;
-    ctx.NV_SORT_DD_HB = [{ x0: 780, y0: 162, x1: 960, y1: 202, v: 'title' }];
-    ctx.HB_NV_TRDOTS = [{ info: { list: [], idx: 0, sourceMeta: {} }, x0: 780, y0: 162, x1: 960, y1: 202, mx: 780, my: 202 }];
+    ctx.brPlSort = 'default';
+    ctx.brPlSortOpen = true;
+    ctx.BR_SORT_DD_HB = [{ x0: 780, y0: 162, x1: 960, y1: 202, v: 'title' }];
+    ctx.HB_BR_TRDOTS = [{ info: { list: [], idx: 0, sourceMeta: {} }, x0: 780, y0: 162, x1: 960, y1: 202, mx: 780, my: 202 }];
     ctx.on_mouse_lbtn_up(ctx.px(870), ctx.px(182));
-    assert.strictEqual(ctx.ctxMenu, null, 'nvPlSortOpen beats overlapping HB_NV_TRDOTS');
-    assert.strictEqual(ctx.nvPlSort, 'title', 'nvPlSort updated when overlapping HB_NV_TRDOTS');
+    assert.strictEqual(ctx.ctxMenu, null, 'brPlSortOpen beats overlapping HB_BR_TRDOTS');
+    assert.strictEqual(ctx.brPlSort, 'title', 'brPlSort updated when overlapping HB_BR_TRDOTS');
 
     ctx.NVData.albumsTab = 'newest';
     state.httpQueue.length = 0;
@@ -1330,9 +1340,9 @@ function run() {
     while (state.httpQueue.length) flushOneHttp('get', 200, { 'subsonic-response': { status: 'ok' } });
 
     ctx.NVData.albumsTab = 'recent';
-    ctx.nvViewId = 'recent';
-    ctx.nvAlbTabOpen = false;
-    ctx.nvPlSortOpen = false;
+    ctx.brViewId = 'recent';
+    ctx.brAlbTabOpen = false;
+    ctx.brPlSortOpen = false;
     ctx.mx = -1;
     ctx.my = -1;
 
@@ -1355,14 +1365,14 @@ function run() {
 
     ctx.mx = -1; ctx.my = -1;
     const grMiniLightRest = makeGraphics();
-    ctx.nvDrawMiniPill(grMiniLightRest, 100, 50, 68, 30, '\u8fd4\u56de', 'back', 'back', { overlay: true });
+    ctx.brDrawMiniPill(grMiniLightRest, 100, 50, 68, 30, ctx.T('btn.back'), 'back', 'back', { overlay: true });
     assert.strictEqual(grMiniLightRest.fillRoundRectCalls[0].col, ctx.RGBA(0, 0, 0, 22), 'Light overlay mini-pill rest bg');
     assert.strictEqual(grMiniLightRest.drawRoundRectCalls[0].col, ctx.COL.line, 'Light overlay mini-pill rest border');
     assert.ok(grMiniLightRest.gdiDrawTextCalls.every(c => c.col === ctx.COL.text), 'Light overlay mini-pill rest uses COL.text');
 
     ctx.mx = 134; ctx.my = 65;
     const grMiniLightHot = makeGraphics();
-    ctx.nvDrawMiniPill(grMiniLightHot, 100, 50, 68, 30, '\u8fd4\u56de', 'back', 'back', { overlay: true });
+    ctx.brDrawMiniPill(grMiniLightHot, 100, 50, 68, 30, ctx.T('btn.back'), 'back', 'back', { overlay: true });
     assert.strictEqual(grMiniLightHot.fillRoundRectCalls[0].col, ctx.RGBA(0, 0, 0, 50), 'Light overlay mini-pill hover darkens bg');
     assert.strictEqual(grMiniLightHot.drawRoundRectCalls[0].col, ctx.COL.text2, 'Light overlay mini-pill hover draws crisp border');
     assert.ok(grMiniLightHot.gdiDrawTextCalls.every(c => c.col === ctx.COL.text && c.col !== ctx.COL.white), 'Light overlay mini-pill hover keeps dark ink (never COL.white)');
@@ -1372,14 +1382,14 @@ function run() {
     assert.strictEqual(ctx.IS_LIGHT, false, '15f: Dark mode restored');
     ctx.mx = -1; ctx.my = -1;
     const grMiniDarkRest = makeGraphics();
-    ctx.nvDrawMiniPill(grMiniDarkRest, 100, 50, 68, 30, '\u8fd4\u56de', 'back', 'back', { overlay: true });
+    ctx.brDrawMiniPill(grMiniDarkRest, 100, 50, 68, 30, ctx.T('btn.back'), 'back', 'back', { overlay: true });
     assert.strictEqual(grMiniDarkRest.fillRoundRectCalls[0].col, ctx.RGBA(0, 0, 0, 96), 'Dark overlay mini-pill rest bg');
     assert.strictEqual(grMiniDarkRest.drawRoundRectCalls[0].col, ctx.RGBA(255, 255, 255, 34), 'Dark overlay mini-pill rest border');
     assert.ok(grMiniDarkRest.gdiDrawTextCalls.every(c => c.col === ctx.COL.white), 'Dark overlay mini-pill rest uses COL.white');
 
     ctx.mx = 134; ctx.my = 65;
     const grMiniDarkHot = makeGraphics();
-    ctx.nvDrawMiniPill(grMiniDarkHot, 100, 50, 68, 30, '\u8fd4\u56de', 'back', 'back', { overlay: true });
+    ctx.brDrawMiniPill(grMiniDarkHot, 100, 50, 68, 30, ctx.T('btn.back'), 'back', 'back', { overlay: true });
     assert.strictEqual(grMiniDarkHot.fillRoundRectCalls[0].col, ctx.RGBA(255, 255, 255, 48), 'Dark overlay mini-pill hover bg');
     assert.strictEqual(grMiniDarkHot.drawRoundRectCalls[0].col, ctx.RGBA(255, 255, 255, 115), 'Dark overlay mini-pill hover border');
     assert.ok(grMiniDarkHot.gdiDrawTextCalls.every(c => c.col === ctx.COL.white), 'Dark overlay mini-pill hover uses COL.white');
@@ -1392,23 +1402,23 @@ function run() {
       loading: false,
       err: ''
     };
-    ctx.nvHistory = [{ nvView: 'albums', nvViewId: 'recent', nvViewTitle: 'Albums', nvScroll: 0 }];
-    ctx.view = 'navidrome';
-    ctx.nvView = 'album';
-    ctx.nvViewId = 'alb-focus-1';
+    ctx.brHistory = [{ brView: 'albums', brViewId: 'recent', brViewTitle: 'Albums', brScroll: 0 }];
+    ctx.view = 'browse';
+    ctx.brView = 'album';
+    ctx.brViewId = 'alb-focus-1';
     ctx.mx = -1; ctx.my = -1;
     ctx.on_paint(makeGraphics());
 
-    const backHb = ctx.HB_NV_BTN.find(b => b.act === 'back');
-    const artHb = ctx.HB_NV_BTN.find(b => b.act === 'open-album-artist');
-    assert.ok(backHb, 'Album view draws Back button hitbox when nvHistory is non-empty');
+    const backHb = ctx.HB_BR_BTN.find(b => b.act === 'back');
+    const artHb = ctx.HB_BR_BTN.find(b => b.act === 'open-album-artist');
+    assert.ok(backHb, 'Album view draws Back button hitbox when brHistory is non-empty');
     assert.ok(artHb, 'Album view draws clickable artist subtitle hitbox when artistId is present');
 
     ctx.mx = (backHb.x0 + backHb.x1) / 2;
     ctx.my = (backHb.y0 + backHb.y1) / 2;
     const grAlbBackHot = makeGraphics();
     ctx.on_paint(grAlbBackHot);
-    const backLabelCall = grAlbBackHot.gdiDrawTextCalls.find(c => c.str === '\u8fd4\u56de');
+    const backLabelCall = grAlbBackHot.gdiDrawTextCalls.find(c => c.str === ctx.T('btn.back'));
     const backGlyphCall = grAlbBackHot.gdiDrawTextCalls.find(c => c.str === ctx.GLYPH.back);
     assert.ok(backLabelCall && backLabelCall.col === ctx.COL.text, 'Light Album Back label stays COL.text on hover');
     assert.ok(backGlyphCall && backGlyphCall.col === ctx.COL.text, 'Light Album Back icon stays COL.text on hover');
@@ -1444,7 +1454,7 @@ function run() {
     ctx.my = (lyrTabHb.y0 + lyrTabHb.y1) / 2;
     const grTabHot = makeGraphics();
     ctx.drawQueue(grTabHot);
-    const lyrTabLbl = grTabHot.gdiDrawTextCalls.find(c => c.str === 'Lyrics');
+    const lyrTabLbl = grTabHot.gdiDrawTextCalls.find(c => c.str === ctx.T('tab.lyrics'));
     assert.ok(lyrTabLbl && lyrTabLbl.col === ctx.COL.text, 'Hovering inactive Lyrics tab brightens text to COL.text');
     assert.ok(grTabHot.fillRoundRectCalls.some(c => c.x === lyrTabHb.x0 && c.col === ctx.COL.rowHover), 'Hovering inactive Lyrics tab draws COL.rowHover pill');
 
@@ -1509,10 +1519,10 @@ function run() {
     ctx.exitFullscreen();
     ctx.fsMode = false;
     ctx.mx = -1; ctx.my = -1;
-    ctx.nvHistory = [];
-    ctx.view = 'navidrome';
-    ctx.nvView = 'albums';
-    ctx.nvViewId = 'recent';
+    ctx.brHistory = [];
+    ctx.view = 'browse';
+    ctx.brView = 'albums';
+    ctx.brViewId = 'recent';
     ctx.rightTab = savedTab;
     ctx.pbShuffle = savedShuffle;
     ctx.NP = savedNp;
@@ -1531,19 +1541,19 @@ function run() {
   const bdUnload = ctx.fsBackdrop;
   assert.ok(bdUnload && !bdUnload._disposed);
   ctx.fsMode = false;
-  ctx.nvDrawCard(makeGraphics(), 250, 200, 176, '', 'lc-seed', 'Left Clipped Album', 'Left Clipped Sub', false, 'album', 'lc-1', {}, false, 290, 600, 200, 450);
+  ctx.brDrawCard(makeGraphics(), 250, 200, 176, '', 'lc-seed', 'Left Clipped Album', 'Left Clipped Sub', false, 'album', 'lc-1', {}, false, 290, 600, 200, 450);
   const scratchUnload = ctx.cardTextScratch;
   assert.ok(scratchUnload && !scratchUnload._disposed);
-  ctx.view = 'navidrome';
-  ctx.nvView = 'albums';
+  ctx.view = 'browse';
+  ctx.brView = 'albums';
   ctx.on_paint(gr);
-  assert.ok(ctx.nvCardN > 0, 'Navidrome albums populate nvCardCache before unload');
+  assert.ok(ctx.brCardN > 0, 'Navidrome albums populate brCardCache before unload');
   ctx.on_script_unload();
   assert.strictEqual(bdUnload._disposed, true, 'on_script_unload() disposes fsBackdrop bitmap');
   assert.strictEqual(ctx.fsBackdrop, null);
   assert.strictEqual(scratchUnload._disposed, true, 'on_script_unload() disposes cardTextScratch bitmap');
   assert.strictEqual(ctx.cardTextScratch, null);
-  assert.strictEqual(ctx.nvCardN, 0, 'on_script_unload() disposes all nvCardCache bitmaps');
+  assert.strictEqual(ctx.brCardN, 0, 'on_script_unload() disposes all brCardCache bitmaps');
   assert.strictEqual(state.panelsState.Navidrome.visible, false);
   assert.strictEqual(state.panelsState.Lyrics.visible, false);
   assert.strictEqual(Object.keys(ctx.NVApi.httpTasks).length, 0);

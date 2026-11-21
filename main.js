@@ -1,7 +1,7 @@
 'use strict';
 
 /* ============================================================================
-   Verdant -- a Spotify-style theme for foobar2000, drawn from scratch in a
+   PolaPlayer for foobar2000 -- a modern music interface derived from Verdant, in a
    JSplitter panel (foo_uie_jsplitter, SpiderMonkey + GDI+).
 
    Everything on screen is custom-drawn: sidebar, home, playlist and All Songs
@@ -19,12 +19,12 @@
    Optional: foo_ui_wizard, for the frameless window and custom title bar.
    See ./README.md for installation & Panel Properties, and ./LICENSE (MIT).
 
-   Author: superziper
+   Based on Verdant by superziper (MIT); PolaPlayer development by SpectorXCC.
    ============================================================================ */
 
 // the key is `features`, not `options` -- without features.drag_n_drop the panel is never
 // registered as an OLE drop target, so no on_drag_* fires
-window.DefineScript('Verdant', { author:'superziper', version:'1.3.0', features:{ drag_n_drop:true, grab_focus:true } });
+window.DefineScript('PolaPlayer', { author:'SpectorXCC / superziper (Verdant)', version:'2.0.0', features:{ drag_n_drop:true, grab_focus:true } });
 var DLGC_WANTALLKEYS=0x0004;   // capture ALL keys; applied only in Search view (see applyKeyMode)
 var DLGC_WANTCHARS=0x0080;     // capture character keys only -- enough for Space = play/pause
 
@@ -38,6 +38,7 @@ var DLGC_WANTCHARS=0x0080;     // capture character keys only -- enough for Spac
    Paths are relative to this file: JSplitter resolves include() against the
    including script's own folder. */
 include('core/props.js');
+include('core/i18n.js');
 include('core/tokens.js');
 include('core/util.js');
 include('core/display.js');
@@ -48,7 +49,11 @@ include('core/jobs.js');
 include('data/art.js');
 include('data/navidrome_api.js');
 include('data/navidrome_art.js');
+include('data/cover.js');
+include('data/source.js');
 include('data/library.js');
+include('data/loved.js');
+include('data/stats.js');
 include('data/playback.js');
 include('data/navidrome_playback.js');
 include('data/lyrics.js');
@@ -57,16 +62,16 @@ include('data/replaygain.js');
 include('data/discord.js');
 include('data/dedupe.js');
 include('data/playlist_edit.js');
+include('data/source_navidrome.js');
+include('data/source_local.js');
 
 include('ui/skeleton.js');
 include('ui/chrome.js');
+include('ui/setup.js');
 
-include('views/cards.js');
+include('views/components.js');
+include('views/browse.js');
 include('views/nav.js');
-include('views/navidrome.js');
-include('views/playlist.js');
-include('views/home.js');
-include('views/artist.js');
 include('views/songs.js');
 include('views/search.js');
 include('views/queue.js');

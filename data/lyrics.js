@@ -23,7 +23,7 @@ function lyLayout(gr,maxW,font,model){
   var m=model||activeLyricsModel();
   font=font||FONT.lyric;
   if(lyLay.lyr===m && lyLay.w===maxW && lyLay.font===font) return lyLay;
-  var subLh=Math.round(gr.CalcTextHeight('Ag\u6b4c',font))+4, gap=Math.round(subLh*0.55);
+  var subLh=Math.round(gr.CalcTextHeight(LANG_METRIC_TEXT,font))+4, gap=Math.round(subLh*0.55);
   var subs=[], top=[], cen=[], blockH=[], acc=0;
   for(var i=0;i<m.lines.length;i++){
     var wr=gr.EstimateLineWrap(m.lines[i].text||'',font,maxW), parts=[];
