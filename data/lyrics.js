@@ -95,7 +95,8 @@ function lyTick(){
   var d=lyTarget-lyScroll;
   if(Math.abs(d)<0.5){ lyScroll=lyTarget; stopLyAnim(); }
   else lyScroll+=d*(1-Math.exp(-LY_RATE*dt));
-  if(fsMode){ repaintAll(); } else { repaintQueue(); }
+  if(fsMode){ stopLyAnim(); return; }
+  repaintQueue();
 }
 function startLyAnim(){ if(!lyTimer){ lyLastMs=nowMs(); lyTimer=window.SetInterval(lyTick,ANIM_MS); } }
 function stopLyAnim(){ if(lyTimer){ window.ClearInterval(lyTimer); lyTimer=null; } lyLastMs=0; }

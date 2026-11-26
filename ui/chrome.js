@@ -78,7 +78,18 @@ function openMenu(root,x,y){
     repaintAll();
     return;
   }
-  try{ var mm=fb.CreateMainMenuManager(); mm.Init(root); var m=window.CreatePopupMenu(); mm.BuildMenu(m,1,600); var id=m.TrackPopupMenu(px(x),px(y)); if(id>0) mm.ExecuteByID(id-1); }catch(e){}
+  try{
+    var mm=fb.CreateMainMenuManager(); mm.Init(root);
+    var m=window.CreatePopupMenu(); mm.BuildMenu(m,1,600);
+    var previewId=700;
+    if(root==='file'){
+      m.AppendMenuSeparator();
+      m.AppendMenuItem(0,previewId,webPreviewLabel());
+    }
+    var id=m.TrackPopupMenu(px(x),px(y));
+    if(root==='file' && id===previewId) webPreviewOpen();
+    else if(id>0) mm.ExecuteByID(id-1);
+  }catch(e){}
 }
 
 // Rounded outline. GDI+ rejects an arc bigger than half the side and centres a stroke on the

@@ -152,6 +152,7 @@ function makeThemeFonts(){
 function refreshFonts(){
   FONT=makeThemeFonts(); LH_F=[]; LH_V=[];
   if(typeof fsFonts!=='undefined') fsFonts={};
+  if(typeof invalidateFsMetrics==='function') invalidateFsMetrics();
   return FONT;
 }
 var FONT=makeThemeFonts();

@@ -38,7 +38,7 @@ function nvParseStructured(body){
 }
 
 function nvAccept(generation, lyric, status){
-  if(generation !== NV.generation) return;
+  if(generation !== NV.generation || NV.key !== nvTrackKey()) return;
   NV.lyrics = lyric; NV.status = status;
   if(lyric){
     NV.cache[NV.key] = lyric; NV.order.push(NV.key);
@@ -46,7 +46,10 @@ function nvAccept(generation, lyric, status){
   }
   lySnap = true; lyStScroll = 0; lyLay = { lyr: null, w: -1 };
   fsLyReset();
-  repaintAll();
+  if(typeof fsBridgePushLyrics === 'function') fsBridgePushLyrics();
+  if(!(typeof fsMode === 'boolean' && fsMode && typeof fsBridgeIsShowing === 'function' && fsBridgeIsShowing())){
+    repaintAll();
+  }
 }
 
 function nvLyricsReq(c, endpoint, params, generation, done){

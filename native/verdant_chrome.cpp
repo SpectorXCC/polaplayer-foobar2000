@@ -12,6 +12,8 @@
 #include <atomic>
 #include <cstring>
 #include <cwchar>
+#include <string>
+#include "webview_host.hpp"
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -119,7 +121,7 @@ static void FindPrimaryPanelOffset(HWND mainHwnd, int& offX, int& offY) {
     HWND best = nullptr;
     LONG bestArea = -1;
     for (HWND ch : g_state.childHwnds) {
-        if (!IsWindow(ch) || !IsWindowVisible(ch)) continue;
+        if (!IsWindow(ch) || !IsWindowVisible(ch) || WvOwnsWindow(ch)) continue;
         RECT r{};
         if (!GetWindowRect(ch, &r)) continue;
         int w = r.right - r.left;
@@ -243,7 +245,7 @@ static LRESULT CALLBACK ChildSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LP
 }
 
 static BOOL CALLBACK AttachChildEnumProc(HWND hwnd, LPARAM lParam) {
-    if (hwnd && IsWindow(hwnd)) {
+    if (hwnd && IsWindow(hwnd) && !WvOwnsWindow(hwnd)) {
         if (SetWindowSubclass(hwnd, ChildSubclassProc, SUBCLASS_CHILD_ID, 0))
             g_state.childHwnds.push_back(hwnd);
     }
@@ -261,7 +263,7 @@ static void RefreshChildSubclasses() {
 }
 
 static BOOL CALLBACK EnsureChildEnumProc(HWND hwnd, LPARAM lParam) {
-    if (hwnd && IsWindow(hwnd)) {
+    if (hwnd && IsWindow(hwnd) && !WvOwnsWindow(hwnd)) {
         auto* nextList = reinterpret_cast<std::vector<HWND>*>(lParam);
         bool known = false;
         for (HWND prev : g_state.childHwnds) {
@@ -476,6 +478,12 @@ static LRESULT CALLBACK MainSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
             return res;
         }
 
+        case WM_SIZE: {
+            LRESULT res = DefSubclassProc(hwnd, msg, wParam, lParam);
+            WvSyncBounds(hwnd);
+            return res;
+        }
+
         case WM_PARENTNOTIFY: {
             if (LOWORD(wParam) == WM_CREATE) {
                 RefreshChildSubclasses();
@@ -493,10 +501,12 @@ static LRESULT CALLBACK MainSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
 
         case WM_DESTROY:
             g_state.destroying = true;
+            WvDestroy();
             break;
 
         case WM_NCDESTROY: {
             g_state.destroying = true;
+            WvDestroy();
             RemoveWindowSubclass(hwnd, MainSubclassProc, uIdSubclass);
             for (HWND ch : g_state.childHwnds) {
                 if (IsWindow(ch)) RemoveWindowSubclass(ch, ChildSubclassProc, SUBCLASS_CHILD_ID);
@@ -555,6 +565,7 @@ static HWND LocateFoobarMainWindow() {
 }
 
 static void DetachChrome(bool restoreDwm) {
+    WvDestroy();
     HWND prev = g_state.mainHwnd;
     if (prev && IsWindow(prev)) {
         if (g_state.captionPress != HTNOWHERE) CancelCaptionPress(prev);
@@ -626,6 +637,21 @@ static int VarToInt(const VARIANT& v, int dflt = 0) {
     return dflt;
 }
 
+static std::wstring VarToWStr(const VARIANT& v) {
+    if (v.vt == VT_BSTR && v.bstrVal) return std::wstring(v.bstrVal, SysStringLen(v.bstrVal));
+    if (v.vt == (VT_BSTR | VT_BYREF) && v.pbstrVal && *v.pbstrVal) {
+        return std::wstring(*v.pbstrVal, SysStringLen(*v.pbstrVal));
+    }
+    VARIANT tmp;
+    VariantInit(&tmp);
+    std::wstring out;
+    if (SUCCEEDED(VariantChangeType(&tmp, const_cast<VARIANT*>(&v), 0, VT_BSTR)) && tmp.bstrVal) {
+        out.assign(tmp.bstrVal, SysStringLen(tmp.bstrVal));
+    }
+    VariantClear(&tmp);
+    return out;
+}
+
 static PARAMDATA g_paramsMetrics[] = {
     {const_cast<LPOLESTR>(L"capX"), VT_I4},
     {const_cast<LPOLESTR>(L"capY"), VT_I4},
@@ -646,6 +672,17 @@ static PARAMDATA g_paramsTheme[] = {
     {const_cast<LPOLESTR>(L"canvasColor"), VT_I4},
     {const_cast<LPOLESTR>(L"borderColor"), VT_I4}
 };
+static PARAMDATA g_paramsWebViewInit[] = {
+    {const_cast<LPOLESTR>(L"appDir"), VT_BSTR},
+    {const_cast<LPOLESTR>(L"cacheDir"), VT_BSTR},
+    {const_cast<LPOLESTR>(L"dataDir"), VT_BSTR}
+};
+static PARAMDATA g_paramsWebViewShow[] = {
+    {const_cast<LPOLESTR>(L"visible"), VT_I4}
+};
+static PARAMDATA g_paramsWebViewPost[] = {
+    {const_cast<LPOLESTR>(L"json"), VT_BSTR}
+};
 static METHODDATA g_chromeMethods[] = {
     {const_cast<LPOLESTR>(L"Attach"), nullptr, 1, 0, CC_STDCALL, 0, DISPATCH_METHOD, VT_BOOL},
     {const_cast<LPOLESTR>(L"Detach"), nullptr, 2, 1, CC_STDCALL, 0, DISPATCH_METHOD, VT_EMPTY},
@@ -657,7 +694,14 @@ static METHODDATA g_chromeMethods[] = {
     {const_cast<LPOLESTR>(L"ExitMaximize"), nullptr, 8, 7, CC_STDCALL, 0, DISPATCH_METHOD, VT_EMPTY},
     {const_cast<LPOLESTR>(L"SetTheme"), g_paramsTheme, 9, 8, CC_STDCALL, 3, DISPATCH_METHOD, VT_EMPTY},
     {const_cast<LPOLESTR>(L"MaxButtonHot"), nullptr, 11, 9, CC_STDCALL, 0, DISPATCH_PROPERTYGET, VT_BOOL},
-    {const_cast<LPOLESTR>(L"DetachForExit"), nullptr, 12, 10, CC_STDCALL, 0, DISPATCH_METHOD, VT_EMPTY}
+    {const_cast<LPOLESTR>(L"DetachForExit"), nullptr, 12, 10, CC_STDCALL, 0, DISPATCH_METHOD, VT_EMPTY},
+    {const_cast<LPOLESTR>(L"WebViewAvailable"), nullptr, 13, 11, CC_STDCALL, 0, DISPATCH_PROPERTYGET, VT_BOOL},
+    {const_cast<LPOLESTR>(L"WebViewReady"), nullptr, 14, 12, CC_STDCALL, 0, DISPATCH_PROPERTYGET, VT_BOOL},
+    {const_cast<LPOLESTR>(L"WebViewInit"), g_paramsWebViewInit, 15, 13, CC_STDCALL, 3, DISPATCH_METHOD, VT_BOOL},
+    {const_cast<LPOLESTR>(L"WebViewShow"), g_paramsWebViewShow, 16, 14, CC_STDCALL, 1, DISPATCH_METHOD, VT_EMPTY},
+    {const_cast<LPOLESTR>(L"WebViewPostMessage"), g_paramsWebViewPost, 17, 15, CC_STDCALL, 1, DISPATCH_METHOD, VT_BOOL},
+    {const_cast<LPOLESTR>(L"WebViewPollMessages"), nullptr, 18, 16, CC_STDCALL, 0, DISPATCH_METHOD, VT_BSTR},
+    {const_cast<LPOLESTR>(L"WebViewDestroy"), nullptr, 19, 17, CC_STDCALL, 0, DISPATCH_METHOD, VT_EMPTY}
 };
 static INTERFACEDATA g_chromeIface = {
     g_chromeMethods,
@@ -746,6 +790,13 @@ public:
         else if (_wcsicmp(name, L"SetTheme") == 0) rgDispId[0] = 9;
         else if (_wcsicmp(name, L"MaxButtonHot") == 0) rgDispId[0] = 11;
         else if (_wcsicmp(name, L"DetachForExit") == 0) rgDispId[0] = 12;
+        else if (_wcsicmp(name, L"WebViewAvailable") == 0) rgDispId[0] = 13;
+        else if (_wcsicmp(name, L"WebViewReady") == 0) rgDispId[0] = 14;
+        else if (_wcsicmp(name, L"WebViewInit") == 0) rgDispId[0] = 15;
+        else if (_wcsicmp(name, L"WebViewShow") == 0) rgDispId[0] = 16;
+        else if (_wcsicmp(name, L"WebViewPostMessage") == 0) rgDispId[0] = 17;
+        else if (_wcsicmp(name, L"WebViewPollMessages") == 0) rgDispId[0] = 18;
+        else if (_wcsicmp(name, L"WebViewDestroy") == 0) rgDispId[0] = 19;
         else return DISP_E_UNKNOWNNAME;
         return S_OK;
     }
@@ -863,6 +914,61 @@ public:
             }
             case 12: { // DetachForExit()
                 ReleaseChrome(true);
+                return S_OK;
+            }
+            case 13: { // WebViewAvailable
+                if (!(wFlags & DISPATCH_PROPERTYGET)) return DISP_E_MEMBERNOTFOUND;
+                if (pVarResult) {
+                    pVarResult->vt = VT_BOOL;
+                    pVarResult->boolVal = WvIsAvailable(g_hModule) ? VARIANT_TRUE : VARIANT_FALSE;
+                }
+                return S_OK;
+            }
+            case 14: { // WebViewReady
+                if (!(wFlags & DISPATCH_PROPERTYGET)) return DISP_E_MEMBERNOTFOUND;
+                if (pVarResult) {
+                    pVarResult->vt = VT_BOOL;
+                    pVarResult->boolVal = WvIsReady() ? VARIANT_TRUE : VARIANT_FALSE;
+                }
+                return S_OK;
+            }
+            case 15: { // WebViewInit(appDir, cacheDir, dataDir)
+                if (argc < 3 || !argv) return DISP_E_BADPARAMCOUNT;
+                // COM DISPPARAMS args are in reverse order
+                std::wstring appDir = VarToWStr(argv[2]);
+                std::wstring cacheDir = VarToWStr(argv[1]);
+                std::wstring dataDir = VarToWStr(argv[0]);
+                bool ok = WvInit(g_state.mainHwnd, g_hModule, appDir.c_str(), cacheDir.c_str(), dataDir.c_str());
+                if (pVarResult) {
+                    pVarResult->vt = VT_BOOL;
+                    pVarResult->boolVal = ok ? VARIANT_TRUE : VARIANT_FALSE;
+                }
+                return S_OK;
+            }
+            case 16: { // WebViewShow(visible)
+                if (argc < 1 || !argv) return DISP_E_BADPARAMCOUNT;
+                WvSetVisible(VarToInt(argv[0]) != 0);
+                return S_OK;
+            }
+            case 17: { // WebViewPostMessage(json)
+                if (argc < 1 || !argv) return DISP_E_BADPARAMCOUNT;
+                std::wstring json = VarToWStr(argv[0]);
+                bool ok = WvPostJson(json.c_str());
+                if (pVarResult) {
+                    pVarResult->vt = VT_BOOL;
+                    pVarResult->boolVal = ok ? VARIANT_TRUE : VARIANT_FALSE;
+                }
+                return S_OK;
+            }
+            case 18: { // WebViewPollMessages()
+                if (pVarResult) {
+                    pVarResult->vt = VT_BSTR;
+                    pVarResult->bstrVal = WvDrainMessagesJson();
+                }
+                return S_OK;
+            }
+            case 19: { // WebViewDestroy()
+                WvDestroy();
                 return S_OK;
             }
             default:

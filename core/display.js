@@ -67,6 +67,8 @@ function clearDisplayCaches(){
   npArtRendered={};npArtRenderedOrder=[];
   if(typeof disposeFsBackdrop==='function') disposeFsBackdrop();
   else{ fsBackdrop=null;fsBackdropArt=null;fsBackdropKey=''; }
+  if(typeof invalidateFsMetrics==='function') invalidateFsMetrics();
+  if(typeof disposeFsLyBmps==='function') disposeFsLyBmps();
   lyLay={lyr:null,w:-1};fsLyReset();
   browseLayoutKey='';capW=-1;capEnd=-1;
   if(typeof nvClearArtDerivCaches==='function') nvClearArtDerivCaches();

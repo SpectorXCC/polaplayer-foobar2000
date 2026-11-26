@@ -43,6 +43,13 @@ function nvArtFinish(coverId, img){
   capPut(nvArtCache, nvArtOrder, ART_CAP, coverId, img || null);
   nvArtInFlight = Math.max(0, nvArtInFlight - 1);
   nvArtPump();
+  if(typeof fsMode==='boolean' && fsMode){
+    if(NP && typeof nvCoverIdFromPath==='function' && nvCoverIdFromPath(NP.Path)===coverId){
+      if(typeof fsBridgePushCover==='function') fsBridgePushCover();
+      if(typeof fsBridgeIsShowing!=='function' || !fsBridgeIsShowing()) repaintAll();
+    }
+    return;
+  }
   artWarmRepaint();
 }
 

@@ -76,6 +76,8 @@ include('views/songs.js');
 include('views/search.js');
 include('views/queue.js');
 include('views/bar.js');
+include('views/web_player_preview.js');
+include('views/fullscreen_bridge.js');
 include('views/fullscreen.js');
 
 // last: owns the panel state the views read, and registers every foobar callback

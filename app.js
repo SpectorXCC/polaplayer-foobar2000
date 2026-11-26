@@ -7,8 +7,8 @@ var W=dip(window.Width), H=dip(window.Height), R={}, NP=null, npTitleStr='', npA
 // Repaint scope flags. dirtyAll (sticky) forces a full paint; partial flags accumulate.
 // A full window.Repaint() MUST set dirtyAll (use repaintAll) so a paint serviced while a
 // partial flag is pending can't blank the rest of the window.
-var dirtyAll=true, dirtyBar=false, dirtyQueue=false, dirtySearch=false, dirtyMain=false, dirtyNav=false, dirtyTitle=false, dirtyViz=false;
-function clearDirty(){ dirtyAll=dirtyBar=dirtyQueue=dirtySearch=dirtyMain=dirtyNav=dirtyTitle=dirtyViz=false; }
+var dirtyAll=true, dirtyBar=false, dirtyQueue=false, dirtySearch=false, dirtyMain=false, dirtyNav=false, dirtyTitle=false, dirtyViz=false, dirtyFsLyrics=false, dirtyFsSeek=false, dirtyFsCtrl=false, dirtyFsTop=false;
+function clearDirty(){ dirtyAll=dirtyBar=dirtyQueue=dirtySearch=dirtyMain=dirtyNav=dirtyTitle=dirtyViz=dirtyFsLyrics=dirtyFsSeek=dirtyFsCtrl=dirtyFsTop=false; }
 /* When the oldest pending partial flag was raised. A RepaintRect is serviced within a frame or two,
    so a flag still pending long after it went up means its paint was DEFERRED -- the window was
    minimised, and a minimised window gets no WM_PAINT. The paint that finally arrives on restore is
@@ -18,7 +18,7 @@ function clearDirty(){ dirtyAll=dirtyBar=dirtyQueue=dirtySearch=dirtyMain=dirtyN
    leaving for the taskbar raises one even when paused. Every partial setter calls markDirty() FIRST,
    so the clock records the oldest flag rather than being reset by each new one. */
 var dirtySince=0, DIRTY_STALE_MS=250;
-function anyDirty(){ return dirtyBar||dirtyQueue||dirtySearch||dirtyMain||dirtyNav||dirtyTitle||dirtyViz; }
+function anyDirty(){ return dirtyBar||dirtyQueue||dirtySearch||dirtyMain||dirtyNav||dirtyTitle||dirtyViz||dirtyFsLyrics||dirtyFsSeek||dirtyFsCtrl||dirtyFsTop; }
 function markDirty(){ if(!anyDirty()) dirtySince=Date.now(); }
 function repaintAll(force){ syncNavidromePanel(); dirtyAll=true; window.Repaint(!!force); }
 function hasActiveOverlay(){
@@ -101,8 +101,53 @@ function repaintQueue(){
   markDirty(); dirtyQueue=true;
   repaintRect(R.queue.x,R.queue.y,R.queue.w,R.queue.h);
 }
-// the visualizer's own band -- see the fullscreen branch of on_paint
-function repaintViz(){ markDirty(); dirtyViz=true; repaintRect(0,VIZ_TOP,W,Math.max(0,(H-172)-VIZ_TOP)); }
+// the visualizer's own band & fullscreen sub-regions -- see the fullscreen branch of on_paint
+function repaintViz(){
+  if(!fsMode || fsView!=='viz' || dirtyViz) return;
+  var vr=(typeof vizDirtyRect==='function')?vizDirtyRect():{x:0,y:VIZ_TOP,w:W,h:Math.max(0,(H-172)-VIZ_TOP)};
+  if(vr.w<=0 || vr.h<=0) return;
+  markDirty(); dirtyViz=true;
+  repaintRect(vr.x,vr.y,vr.w,vr.h);
+}
+function repaintFsRegion(r){
+  if(r && r.w>0 && r.h>0) repaintRect(r.x,r.y,r.w,r.h);
+  else repaintAll();
+}
+function repaintFsLyrics(){
+  if(!fsMode || fsView!=='lyrics' || dirtyFsLyrics) return;
+  var m=(typeof fsCachedMetrics==='function')?fsCachedMetrics():null;
+  if(!m){ repaintAll(); return; }
+  markDirty(); dirtyFsLyrics=true;
+  repaintFsRegion(m.lyRect);
+}
+function repaintFsSeek(){
+  if(!fsMode || dirtyFsSeek) return;
+  var m=(typeof fsCachedMetrics==='function')?fsCachedMetrics():null;
+  if(!m){ repaintAll(); return; }
+  markDirty(); dirtyFsSeek=true;
+  repaintFsRegion(m.seekRect);
+}
+function repaintFsCtrl(){
+  if(!fsMode || dirtyFsCtrl) return;
+  var m=(typeof fsCachedMetrics==='function')?fsCachedMetrics():null;
+  if(!m){ repaintAll(); return; }
+  markDirty(); dirtyFsCtrl=true;
+  repaintFsRegion(m.ctrlRect);
+}
+function repaintFsTop(){
+  if(!fsMode || dirtyFsTop) return;
+  var m=(typeof fsCachedMetrics==='function')?fsCachedMetrics():null;
+  if(!m){ repaintAll(); return; }
+  markDirty(); dirtyFsTop=true;
+  repaintFsRegion(m.topRect);
+}
+function repaintFsHoverOne(sig){
+  if(!sig) return;
+  if(sig.indexOf('fl')===0) repaintFsLyrics();
+  else if(sig.indexOf('ft')===0) repaintFsTop();
+  else if(sig.indexOf('fc')===0) repaintFsCtrl();
+  else repaintAll();
+}
 function repaintTitle(){
   if(fsMode||hasActiveOverlay()){ repaintAll(); return; }
   markDirty(); dirtyTitle=true;
@@ -331,7 +376,7 @@ function layout(){
   syncNavidromePanel();
 }
 // bitmaps are keyed by geometry; and the panel's surface is rebuilt, so the next paint must be full
-function on_size(w,h){ if(checkDisplay(false))return;W=dip(w);H=dip(h); layout(); if(typeof clearBrCardCache==='function') clearBrCardCache(); skelImgs={}; dirtyAll=true; }
+function on_size(w,h){ if(checkDisplay(false))return;W=dip(w);H=dip(h); layout(); if(typeof clearBrCardCache==='function') clearBrCardCache(); skelImgs={}; if(typeof invalidateFsMetrics==='function') invalidateFsMetrics(); if(fsMode){ if(typeof disposeFsBackdrop==='function') disposeFsBackdrop(); if(typeof disposeFsLyBmps==='function') disposeFsLyBmps(); } dirtyAll=true; }
 /* Light/dark switching. Everything that reads COL at paint time follows on its own; what has to be
    dropped here is anything that baked a colour into a bitmap: the corner stamps (filled with the
    canvas colour), the pre-rendered playlist/artist cards, and the skeleton placeholders. */
@@ -355,7 +400,12 @@ function updateNP(){
   npArtistStr=m?TF.npArtist.EvalWithMetadb(m):'';
 }
 function repaintBar(){
-  if(fsMode||hasActiveOverlay()){ repaintAll(); return; }
+  if(fsMode){
+    if(typeof fsBridgeIsShowing==='function' && fsBridgeIsShowing()) return;
+    repaintFsSeek();
+    return;
+  }
+  if(hasActiveOverlay()){ repaintAll(); return; }
   if(R.barY===undefined){ repaintAll(); return; }
   markDirty(); dirtyBar=true;
   repaintRect(0,R.barY,W,M.barH);
@@ -369,24 +419,34 @@ function drawMainCounted(gr){
   shimSettle();
 }
 function on_paint(gr){
-  if(checkDisplay(false))return;gr=dpiGraphics(gr);
+  if(checkDisplay(false))return;
+  if(webPreviewIsShowing()){ clearDirty(); return; }
+  gr=dpiGraphics(gr);
   visPlCache=null;   // one playlist scan per frame, shared by drawNav and drawHome
   gr.SetSmoothingMode(2);
   gr.SetInterpolationMode(5);   // NearestNeighbor: every DrawImage here is 1:1, so filtering is pure cost
   var stale=anyDirty() && (Date.now()-dirtySince)>DIRTY_STALE_MS;   // see markDirty
   if(fsMode){
-    /* A visualizer frame changes only the bars. Redrawing the cover, the title, the seek bar and
-       the whole transport underneath them 30 times a second was most of the frame's cost, so a
-       frame flagged ONLY by the viz repaints just that band. Any other flag (or a paint we did not
-       ask for) still takes the full path, so nothing can be left stale behind the bars. */
-    var vizOnly=dirtyViz && !stale && fsView==='viz' && !vizMenuOpen && !dirtyAll && !dirtyBar && !dirtyMain
-                && !dirtyNav && !dirtyQueue && !dirtySearch && !dirtyTitle;
-    clearDirty();
-    // Fullscreen is drawn over the (darkened) album art, so it keeps the dark palette in every
-    // mode -- swap it in for this frame only and put the user's palette back afterwards.
+    if(typeof fsBridgeIsShowing==='function' && fsBridgeIsShowing()){ clearDirty(); return; }
+    /* Fullscreen sub-regions (viz band, lyrics scroll/hover, seek bar, transport controls,
+       top mode icons) each paint onto the 1:1 pre-baked backdrop via RepaintRect so ticks
+       and hover state changes skip re-compositing the 128px blurred backdrop and left cover. */
+    var fsAnyPartial=dirtyViz||dirtyFsLyrics||dirtyFsSeek||dirtyFsCtrl||dirtyFsTop;
+    var fsCanPartial=fsAnyPartial && !stale && !dirtyAll && !vizMenuOpen
+                     && !dirtyBar && !dirtyMain && !dirtyNav && !dirtyQueue && !dirtySearch && !dirtyTitle;
     var fsLight=IS_LIGHT; if(fsLight) setPalette(false);
     try{
-      if(vizOnly){ drawVizBand(gr); return; }
+      if(fsCanPartial){
+        var dViz=dirtyViz, dLy=dirtyFsLyrics, dSeek=dirtyFsSeek, dCtrl=dirtyFsCtrl, dTop=dirtyFsTop;
+        clearDirty();
+        if(dViz && fsView==='viz') drawVizBand(gr);
+        if(dLy && fsView==='lyrics') drawFsLyricsRegion(gr);
+        if(dSeek) drawFsSeekRegion(gr);
+        if(dCtrl) drawFsCtrlRegion(gr);
+        if(dTop) drawFsTopRegion(gr);
+        return;
+      }
+      clearDirty();
       drawFullscreen(gr); return;
     }finally{ if(fsLight) setPalette(true); }
   }
@@ -437,7 +497,7 @@ function drawMain(gr){
 
 /* ------------------------- input ------------------------- */
 function seekFrac(x){ return HB_SEEK?clamp01((x-HB_SEEK.x)/HB_SEEK.w):0; }
-function applyVol(x){ if(HB_VOL){ fb.Volume=pos2vol(clamp01((x-HB_VOL.x)/HB_VOL.w)); repaintBar(); } }
+function applyVol(x){ if(HB_VOL){ fb.Volume=pos2vol(clamp01((x-HB_VOL.x)/HB_VOL.w)); if(fsMode) repaintFsCtrl(); else repaintBar(); } }
 function on_mouse_lbtn_down(x,y){
   x=dip(x);y=dip(y);
   chromeExitRequested=false;
@@ -556,7 +616,7 @@ function on_mouse_lbtn_up(x,y){
     }
     cancelRename(); return;                        // click on backdrop: dismiss
   }
-  if(drag==='seek'){ if(fb.PlaybackLength>0) fb.PlaybackTime=fb.PlaybackLength*dragFrac; drag=null; repaintAll(); return; }
+  if(drag==='seek'){ if(fb.PlaybackLength>0) fb.PlaybackTime=fb.PlaybackLength*dragFrac; drag=null; if(fsMode) repaintFsSeek(); else repaintAll(); return; }
   if(drag==='vol'){ drag=null; return; }
   if(drag==='scroll'||drag==='scrollh'||drag==='scrolln'){
     var wasH=(drag==='scrollh'); drag=null;
@@ -697,7 +757,9 @@ function hoverSig(x,y){
   if(fsMode){
     if(vizMenuOpen){ i=hitIdx(VIZ_HB,x,y); return (i<0)?'vz':('vz'+i); }
     if(HB_VIZ && inRect(x,y,HB_VIZ)) return 'vzb';
-    if((i=hitIdx(HB_FS,x,y))>=0) return 'f'+i;      // fullscreen icons: hover feedback, same as anywhere
+    if(typeof HB_FS_TOP!=='undefined' && (i=hitIdx(HB_FS_TOP,x,y))>=0) return 'ft'+i;
+    if(typeof HB_FS_LY!=='undefined' && (i=hitIdx(HB_FS_LY,x,y))>=0) return 'fl'+i;
+    if((i=hitIdx(HB_FS,x,y))>=0) return 'f'+i;      // fullscreen icons fallback
     if((i=hitIdx(HB_CTRL,x,y))>=0) return 'fc'+i;   // fullscreen transport controls
     return '';
   }
@@ -764,10 +826,16 @@ function on_mouse_move(x,y){
   if(drag==='scrolln'){ setScrollN(y); return; }
   var sig=hoverSig(x,y), sk=scrollSection(x,y), z=hoverZone(x,y);
   if(sig!==hoverKey || sk!==scrollKey){   // sk change reveals/hides the section scrollbar
+    var prevSig=hoverKey;
     hoverKey=sig; scrollKey=sk;
-    // an overlay owns the whole screen and on_paint forces a full paint while one is open
-    if(hasActiveOverlay()) repaintAll();
-    else { repaintZone(hoverZoneKey); if(z!==hoverZoneKey) repaintZone(z); }   // clear the old highlight, then draw the new
+    if(fsMode){
+      if(hasActiveOverlay()) repaintAll();
+      else { repaintFsHoverOne(prevSig); if(sig!==prevSig) repaintFsHoverOne(sig); }
+    } else if(hasActiveOverlay()){
+      repaintAll();
+    } else {
+      repaintZone(hoverZoneKey); if(z!==hoverZoneKey) repaintZone(z);   // clear the old highlight, then draw the new
+    }
   }
   hoverZoneKey=z;
 }
@@ -785,9 +853,16 @@ function scrollSection(x,y){
 function on_mouse_leave(){
   mx=-1; my=-1;
   if(hoverKey!==''||scrollKey!==''){
+    var prevSig=hoverKey;
     hoverKey=''; scrollKey='';
-    if(hasActiveOverlay()) repaintAll();
-    else repaintZone(hoverZoneKey);
+    if(fsMode){
+      if(hasActiveOverlay()) repaintAll();
+      else repaintFsHoverOne(prevSig);
+    } else if(hasActiveOverlay()){
+      repaintAll();
+    } else {
+      repaintZone(hoverZoneKey);
+    }
   }
   hoverZoneKey='';
 }
@@ -851,7 +926,7 @@ function on_mouse_wheel(step){
     // lyrics with no timestamps don't roll themselves, so here the wheel scrolls them; with nothing
     // to scroll (synced, short enough to fit, or another view) it stays the volume control
     if(fsLyricsWheel(step)) return;
-    fb.Volume=pos2vol(clamp01(vol2pos(fb.Volume)+step*0.04)); repaintAll(); return;
+    fb.Volume=pos2vol(clamp01(vol2pos(fb.Volume)+step*0.04)); repaintFsCtrl(); return;
   }
   if(ctxMenu||confirmDel||renameEdit||dupPrompt||rgPrompt||(typeof lovedPrompt!=='undefined'&&lovedPrompt)||sgMenuOpen||brAlbTabOpen||brPlSortOpen||brSrvMenuOpen) return;
   // right pane: same deal on the Lyrics tab. Consume the wheel either way -- it belongs to this
@@ -929,8 +1004,10 @@ function on_script_unload(){
   }
   stopDisplayWatch();npArtGeneration++;
   if(typeof clearBrCardCache==='function') clearBrCardCache();
-  nvCancel(); if(typeof nvCancelHttpTasks==='function') nvCancelHttpTasks(); stopFsClock();
+  nvCancel(); if(typeof nvCancelHttpTasks==='function') nvCancelHttpTasks(); stopFsClock(); if(typeof stopFsAnim==='function') stopFsAnim();
   if(typeof disposeFsBackdrop==='function') disposeFsBackdrop(); else fsBackdrop=null;
+  if(typeof disposeFsLyBmps==='function') disposeFsLyBmps();
+  if(typeof fsBridgeDestroy==='function') fsBridgeDestroy();
   if(typeof disposeCardTextScratch==='function') disposeCardTextScratch();
   if(brSearchTimer){ window.ClearTimeout(brSearchTimer); brSearchTimer=null; }
   if(typeof statsFlush==='function') statsFlush();
@@ -956,6 +1033,7 @@ function on_library_items_changed(){ libChanged(); }
 /* ------------------------- playback callbacks ------------------------- */
 function on_playback_new_track(){
   updateNP();
+  fsBridgeTrackId(true);
   if(typeof statsOnNewTrack==='function') statsOnNewTrack();
   if(nvShouldLoadLyrics()) nvLoad();
   else if(typeof loadLyrics==='function') loadLyrics();
@@ -971,11 +1049,15 @@ function on_playback_new_track(){
       lastShufIdx=idx;
     } else lastShufIdx=-1;
   } else lastShufIdx=-1;
+  if(typeof fsBridgePushTrack==='function') fsBridgePushTrack();
+  if(typeof fsBridgeIsShowing==='function' && fsBridgeIsShowing()) return;
   repaintAll();
 }
 function npChanged(){
   updateNP();
   if(nvShouldLoadLyrics()) nvLoad();
+  if(typeof fsBridgePushTrack==='function') fsBridgePushTrack();
+  if(typeof fsBridgeIsShowing==='function' && fsBridgeIsShowing()) return;
   repaintAll();
 }
 function on_playback_dynamic_info_track(){ npChanged(); }
@@ -985,10 +1067,29 @@ function on_playback_time(){
   repaintBar();
   if(nvShouldLoadLyrics() && NV.key!==nvTrackKey()) nvLoad();
 }
-function on_playback_seek(){ lySnap=true; if(fsMode) fsLyReset(); repaintAll(); }
-function on_playback_order_changed(){ syncOrderFromFb(); repaintAll(); }
+function on_playback_seek(){
+  lySnap=true;
+  if(webPreviewIsShowing()) webPreviewPlayback(false,true);
+  if(fsMode){
+    if(typeof fsBridgeIsShowing==='function' && fsBridgeIsShowing()){ fsBridgePushPlayback(true); return; }
+    if(fsView==='lyrics'){ fsLyReset(); repaintFsLyrics(); }
+    repaintFsSeek(); return;
+  }
+  repaintAll();
+}
+function on_playback_order_changed(){
+  syncOrderFromFb();
+  if(typeof fsBridgePushPlayback==='function') fsBridgePushPlayback(false);
+  if(typeof fsBridgeIsShowing==='function' && fsBridgeIsShowing()) return;
+  repaintAll();
+}
 function on_playback_queue_changed(){ repaintAll(); }
-function on_volume_change(){ repaintBar(); }
+function on_volume_change(){
+  if(fsMode){
+    if(typeof fsBridgeIsShowing==='function' && fsBridgeIsShowing()){ fsBridgePushPlayback(false); return; }
+    repaintFsCtrl();
+  } else repaintBar();
+}
 // ReplayGain can also be switched from foobar's own Playback menu -- keep the pill honest
 function on_replaygain_mode_changed(){ repaintMain(); }
 // rgStat included: a ReplayGain scan lands as a tag write, so this is how the pill learns it finished
@@ -1029,7 +1130,7 @@ if(NP && (rightTab==='lyrics' || fsMode)){
   else if(typeof loadLyrics==='function') loadLyrics();
 }
 
-function on_font_changed(){ if(!checkDisplay(false)){ refreshFonts(); repaintAll(true); } }
+function on_font_changed(){ if(!checkDisplay(false)){ refreshFonts(); if(typeof fsBridgePushFonts==='function') fsBridgePushFonts(); repaintAll(true); } }
 function on_http_request_done(id,success,response,status){ if(typeof nvHttpDispatch==='function') nvHttpDispatch(id,success,response,status); }
 function on_download_file_done(path,success){ if(typeof nvOnDownloadDone==='function') nvOnDownloadDone(path,success); }
 function on_load_image_done(cookie,image){ if(typeof nvOnLoadImageDone==='function') nvOnLoadImageDone(cookie,image); }

@@ -699,8 +699,8 @@ var LOCAL_SOURCE = {
       }
     };
   },
-  searchResults: function(){
-    var q = (typeof searchQuery === 'string') ? searchQuery.trim() : '';
+  searchResults: function(query){
+    var q = typeof query==='string' ? query.trim() : (typeof searchQuery==='string' ? searchQuery.trim() : '');
     if(!q) return { query: '', requested: '', artists: [], albums: [], songs: [], rows: EMPTY_ROWS, loading: false, err: '' };
     if(localSearchCache.q !== q || localSearchCache.idxVer !== localIdxVer || !localSearchCache.res){
       this.search(q);

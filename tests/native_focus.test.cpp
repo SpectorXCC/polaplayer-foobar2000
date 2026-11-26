@@ -181,6 +181,18 @@ int main() {
     DISPPARAMS noargs{};
     check(SUCCEEDED(chrome->GetIDsOfNames(IID_NULL,&method,1,LOCALE_NEUTRAL,&id)),"exit-specific COM method exists");
     check(SUCCEEDED(chrome->Invoke(id,IID_NULL,LOCALE_NEUTRAL,DISPATCH_METHOD,&noargs,nullptr,nullptr,nullptr)),"exit release succeeds");
+    for (const wchar_t* wvMethod : {L"WebViewAvailable",L"WebViewReady",L"WebViewInit",L"WebViewShow",L"WebViewPostMessage",L"WebViewPollMessages",L"WebViewDestroy"}) {
+        DISPID wvId=DISPID_UNKNOWN;
+        LPOLESTR wvName=const_cast<LPOLESTR>(wvMethod);
+        check(SUCCEEDED(chrome->GetIDsOfNames(IID_NULL,&wvName,1,LOCALE_NEUTRAL,&wvId)),"WebView2 COM member exists");
+    }
+    VARIANT pollRes; VariantInit(&pollRes);
+    DISPID pollId=DISPID_UNKNOWN;
+    LPOLESTR pollName=const_cast<LPOLESTR>(L"WebViewPollMessages");
+    check(SUCCEEDED(chrome->GetIDsOfNames(IID_NULL,&pollName,1,LOCALE_NEUTRAL,&pollId)),"WebViewPollMessages resolves");
+    check(SUCCEEDED(chrome->Invoke(pollId,IID_NULL,LOCALE_NEUTRAL,DISPATCH_METHOD,&noargs,&pollRes,nullptr,nullptr)),"WebViewPollMessages succeeds cleanly");
+    check(pollRes.vt==VT_BSTR,"WebViewPollMessages returns BSTR");
+    VariantClear(&pollRes);
     check(g_state.attached && g_state.mainHwnd==hwnd,"exit release preserves frame hook until native destruction");
     chrome->Release();
     check(DllCanUnloadNow()==S_FALSE,"DLL remains loaded while its native window hook exists");

@@ -2,6 +2,17 @@
 
 All notable changes to PolaPlayer for foobar2000 will be documented in this file. Earlier entries describe the Verdant-derived baseline.
 
+## [Unreleased]
+
+### Added
+- **PolaPlayer Native 1.0.0** provides a Windows x64 foobar2000 user interface with local library browsing, optional Navidrome, playlist editing, a playback queue, and persistent settings.
+- The native fullscreen player shows synchronized local and Navidrome lyrics, cover art, and an audio spectrum.
+
+### Changed
+- The Columns UI theme can render fullscreen lyrics with WebView2 and AMLL. It falls back to GDI+ when WebView2 is unavailable and uses GDI+ for the visualizer.
+- Fullscreen playback tracks seeks and track changes across renderers and keeps cover exports in a separate cache.
+- The native build accepts SDK and compiler paths as arguments or environment variables.
+
 ## [2.0.0] — PolaPlayer for foobar2000, unified Local / Navidrome
 
 ### Added

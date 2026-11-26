@@ -22,6 +22,8 @@ function propStr(name,dflt){
 }
 var UI_FONT_PROP='Display: UI font (auto / cui / font name)';
 var LYRIC_FONT_PROP='Lyrics: font (auto = match UI / cui / font name)';
+var FS_RENDERER=(propStr('Fullscreen: renderer (auto / webview / gdi)','auto')||'auto').toLowerCase();
+if(FS_RENDERER!=='webview' && FS_RENDERER!=='gdi') FS_RENDERER='auto';
 
 /* Which visualizer the fullscreen view draws. Deliberately NOT a panel property: the picker in
    fullscreen is the place to change it, and mirroring the choice into window.SetProperty only

@@ -35,6 +35,10 @@ var LANGS = {
     'setup.next': 'Continue',
     'setup.start': 'Get started',
 
+    'preview.title': 'PolaPlayer WebView Preview',
+    'preview.requires_webview': 'The preview requires the PolaPlayer WebView2 component.',
+    'preview.start_failed': 'The preview could not start. The regular interface is available.',
+
     'nav.your_library': 'Your Library',
     'nav.all_songs': 'All Songs',
     'nav.artists': 'Artists',
@@ -304,6 +308,10 @@ var LANGS = {
     'setup.back': '\u4e0a\u4e00\u6b65',
     'setup.next': '\u7ee7\u7eed',
     'setup.start': '\u5f00\u59cb\u4f7f\u7528',
+
+    'preview.title': 'PolaPlayer \u7f51\u9875\u9884\u89c8',
+    'preview.requires_webview': '\u7f51\u9875\u9884\u89c8\u9700\u8981 WebView2 \u7ec4\u4ef6\u3002',
+    'preview.start_failed': '\u7f51\u9875\u9884\u89c8\u65e0\u6cd5\u542f\u52a8\uff0c\u5df2\u8fd4\u56de\u539f\u754c\u9762\u3002',
 
     'nav.your_library': '\u97f3\u4e50\u5e93',
     'nav.all_songs': '\u5168\u90e8\u6b4c\u66f2',

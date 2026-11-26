@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PolaPlayer Fullscreen</title>
+  <link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+  <div id="bg-fallback" class="bg-fallback"></div>
+  <div id="bg-layer" class="bg-layer"></div>
+  <div class="bg-scrim"></div>
+
+  <div id="app" class="app mode-lyrics" data-compact="0">
+    <header class="top-bar">
+      <div id="top-now-playing" class="top-title"></div>
+      <div class="top-actions">
+        <button id="btn-viz" class="icon-btn" type="button" aria-label="Visualizer"></button>
+        <button id="btn-lyrics" class="icon-btn active" type="button" aria-label="Lyrics"></button>
+        <button id="btn-exit" class="icon-btn" type="button" aria-label="Exit Fullscreen"></button>
+      </div>
+    </header>
+
+    <main class="stage">
+      <section class="left-col">
+        <div class="cover-wrap">
+          <img id="cover-img" class="cover-img" alt="" crossorigin="anonymous" />
+          <div id="cover-placeholder" class="cover-placeholder">
+            <div id="cover-ph-icon" class="cover-ph-icon"></div>
+          </div>
+        </div>
+
+        <div class="track-meta">
+          <div id="track-title" class="track-title"></div>
+          <div id="track-artist" class="track-artist"></div>
+        </div>
+
+        <div class="seek-section">
+          <div id="seek-bar" class="slider-track seek-track" role="slider" tabindex="-1" aria-label="Seek">
+            <div class="slider-rail">
+              <div id="seek-fill" class="slider-fill"></div>
+            </div>
+          </div>
+          <div class="time-row">
+            <span id="time-cur" class="time-label">0:00</span>
+            <span id="time-rem" class="time-label">-0:00</span>
+          </div>
+        </div>
+
+        <div class="ctrl-row">
+          <button id="btn-shuffle" class="transport-btn sm" type="button" aria-label="Shuffle"></button>
+          <button id="btn-prev" class="transport-btn md" type="button" aria-label="Previous"></button>
+          <button id="btn-play" class="transport-btn lg" type="button" aria-label="Play/Pause"></button>
+          <button id="btn-next" class="transport-btn md" type="button" aria-label="Next"></button>
+          <button id="btn-repeat" class="transport-btn sm" type="button" aria-label="Repeat"></button>
+        </div>
+
+        <div class="vol-row">
+          <span id="vol-icon" class="vol-icon"></span>
+          <div id="vol-bar" class="slider-track vol-track" role="slider" tabindex="-1" aria-label="Volume">
+            <div class="slider-rail">
+              <div id="vol-fill" class="slider-fill"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="right-col" class="right-col">
+        <div id="lyrics-heading" class="lyrics-heading"></div>
+        <div id="lyrics-stage" class="lyrics-stage">
+          <div id="amll-host" class="amll-host"></div>
+          <div id="static-lyrics" class="static-lyrics hidden"></div>
+          <div id="lyrics-empty" class="lyrics-empty hidden">
+            <div id="lyrics-empty-text" class="lyrics-empty-text"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <main id="web-preview" class="web-preview hidden">
+    <header class="preview-top">
+      <strong>PolaPlayer</strong>
+      <div class="preview-tools">
+        <button id="preview-settings-open" type="button"></button>
+        <button id="preview-close" type="button"></button>
+      </div>
+    </header>
+    <aside class="preview-sidebar">
+      <div class="preview-sources">
+        <button id="preview-local" type="button" data-source="local"></button>
+        <button id="preview-remote" type="button" data-source="navidrome">Navidrome</button>
+      </div>
+      <label id="preview-playlist-label" for="preview-playlist"></label>
+      <select id="preview-playlist"></select>
+    </aside>
+    <section class="preview-library" aria-labelledby="preview-title">
+      <div class="preview-heading">
+        <div class="preview-tools preview-workflows">
+          <button id="preview-browse" type="button"></button>
+          <button id="preview-queue" type="button"></button>
+          <input id="preview-search" type="search" autocomplete="off" maxlength="200">
+        </div>
+        <h1 id="preview-title"></h1>
+        <p id="preview-status" role="status"></p>
+        <div class="preview-tools preview-edit">
+          <button id="preview-create" type="button"></button>
+          <button id="preview-rename" type="button"></button>
+          <button id="preview-delete" type="button"></button>
+          <button id="preview-add" type="button"></button>
+          <button id="preview-enqueue" type="button"></button>
+          <button id="preview-remove" type="button"></button>
+          <span id="preview-result" role="status"></span>
+        </div>
+      </div>
+      <div class="preview-columns" aria-hidden="true">
+        <span>#</span><span id="preview-title-label"></span><span id="preview-album-label"></span><span></span>
+      </div>
+      <div id="preview-scroll" class="preview-scroll" tabindex="0" role="region" aria-labelledby="preview-title">
+        <div id="preview-rows" class="preview-rows"></div>
+      </div>
+    </section>
+    <footer class="preview-player">
+      <div class="preview-now">
+        <span class="preview-art"><img id="preview-cover" class="hidden" alt=""></span>
+        <div><strong id="preview-now-title"></strong><span id="preview-artist"></span></div>
+      </div>
+      <div class="preview-transport">
+        <div class="preview-buttons">
+          <button id="preview-prev" type="button" class="preview-icon"></button>
+          <button id="preview-play" type="button" class="preview-icon preview-play"></button>
+          <button id="preview-next" type="button" class="preview-icon"></button>
+        </div>
+        <div class="preview-progress">
+          <span id="preview-time"></span>
+          <input id="preview-position" type="range" min="0" max="1" value="0" step="0.1">
+          <span id="preview-duration"></span>
+        </div>
+      </div>
+      <button id="preview-fullscreen" class="preview-fullscreen" type="button"></button>
+    </footer>
+    <dialog id="preview-edit-dialog">
+      <form id="preview-edit-form">
+        <h2 id="preview-edit-title"></h2>
+        <p id="preview-edit-detail"></p>
+        <input id="preview-edit-name" type="text" maxlength="160">
+        <div class="preview-tools dialog-actions">
+          <button id="preview-edit-cancel" type="button"></button>
+          <button id="preview-edit-submit" type="submit"></button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="preview-settings-dialog">
+      <form id="preview-settings-form">
+        <h2 id="preview-settings-title"></h2>
+        <div class="preview-fields">
+          <label><span id="preview-theme-label"></span><select id="preview-theme"></select></label>
+          <label><span id="preview-language-label"></span><select id="preview-language"></select></label>
+          <label><span id="preview-sources-label"></span><select id="preview-source-mode"></select></label>
+        </div>
+        <div class="preview-tools">
+          <button id="preview-prefs" type="button"></button>
+          <button id="preview-test-server" type="button"></button>
+        </div>
+        <p id="preview-connection" role="status"></p>
+        <div class="preview-tools dialog-actions">
+          <button id="preview-settings-cancel" type="button"></button>
+          <button id="preview-settings-save" type="submit"></button>
+        </div>
+      </form>
+    </dialog>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>

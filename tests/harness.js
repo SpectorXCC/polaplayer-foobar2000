@@ -201,7 +201,12 @@ function createHarness(opts) {
       },
       StackBlur() {},
       GetColourScheme() { return [0xFF336699, 0xFF112233]; },
-      ApplyAlpha() {}
+      ApplyAlpha() {},
+      SaveAs(outPath) {
+        fs.mkdirSync(path.dirname(outPath), { recursive: true });
+        fs.writeFileSync(outPath, 'PNG');
+        return true;
+      }
     };
     return img;
   }
@@ -334,7 +339,35 @@ function createHarness(opts) {
     },
     ToggleMaximize() { this.WindowState = (this.WindowState === 1) ? 0 : 1; },
     WindowMinimize() {},
-    ExitMaximize() { this.WindowState = 0; }
+    ExitMaximize() { this.WindowState = 0; },
+    WebViewAvailable: !!opts.webViewAvailable,
+    WebViewReady: false,
+    webViewInitCalls: [],
+    webViewShowCalls: [],
+    webViewPosted: [],
+    webViewInbox: [],
+    webViewDestroyCalls: 0,
+    WebViewInit(appDir, cacheDir, dataDir) {
+      this.webViewInitCalls.push({ appDir, cacheDir, dataDir });
+      return !!this.WebViewAvailable && !opts.webViewInitFails;
+    },
+    WebViewShow(visible) {
+      this.webViewShowCalls.push(!!visible);
+    },
+    WebViewPostMessage(json) {
+      try { this.webViewPosted.push(JSON.parse(json)); } catch (e) { this.webViewPosted.push(json); }
+      return true;
+    },
+    WebViewPollMessages() {
+      if (!this.webViewInbox.length) return '';
+      const out = JSON.stringify(this.webViewInbox);
+      this.webViewInbox = [];
+      return out;
+    },
+    WebViewDestroy() {
+      this.WebViewReady = false;
+      this.webViewDestroyCalls++;
+    }
   };
 
   let ctx = null;

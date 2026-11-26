@@ -2,6 +2,14 @@ verdant-cache/
 mock_profile/
 tests/mock_profile/
 node_modules/
+fullscreen-web/node_modules/
+fullscreen-web/dist/
+native/vendor/
+native/WebView2Loader.dll
+/native/polaplayer-ui/out/
+/native/polaplayer-ui/web/dist/
+/native/polaplayer-ui/tests/*.test.exe
+/native/polaplayer-ui/foo_ui_polaplayer.fb2k-component
 *.log
 *.sqlite
 *.sqlite-*

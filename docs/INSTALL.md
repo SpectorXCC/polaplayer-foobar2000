@@ -30,13 +30,19 @@
      ```
    - Click **OK** to load PolaPlayer.
 
-4. **(Optional) Register `Verdant.Chrome` for Windows 11 Snap Layouts**
+4. **(Optional) Register `Verdant.Chrome` for Windows 11 Snap Layouts & AMLL WebView2 Fullscreen**
    Run from PowerShell (per-user `HKCU` COM registration, no admin privileges required):
    ```powershell
    cd .\native
    .\register.ps1
    ```
-   To rebuild `VerdantChrome.dll` from source (`verdant_chrome.cpp`), install 64-bit MinGW-w64 with `g++` on PATH and run `.\build.ps1` while foobar2000 is closed. To unregister, run `.\unregister.ps1`. The original helper name is intentionally unchanged.
+   To rebuild `VerdantChrome.dll` from source (automatically fetching Microsoft Edge WebView2 SDK headers + `WebView2Loader.dll`), install 64-bit MinGW-w64 with `g++` on PATH and run `.\build.ps1` while foobar2000 is closed. To unregister, run `.\unregister.ps1`. The original helper name is intentionally unchanged.
+
+   To build the optional Apple Music-like Lyrics (`fullscreen-web/`) WebView2 fullscreen bundle:
+   ```cmd
+   cd fullscreen-web && npm install && cd .. && npm run build:web
+   ```
+   When `Verdant.Chrome`, `WebView2Loader.dll`, Edge WebView2 Runtime, and `fullscreen-web\dist\index.html` are present, Fullscreen renders via `@applemusic-like-lyrics/core` (fluid WebGL mesh background + spring-physics line-by-line lyrics); otherwise it falls back automatically to the built-in GDI+ fullscreen renderer.
 
 5. **Configure Navidrome (optional)**
    Configure servers inside `foo_navidrome` itself. PolaPlayer uses the connection saved by `foo_navidrome` in `config.sqlite` inside your profile folder; it does not create a separate credential store.
@@ -55,6 +61,7 @@ Right-click an empty panel area (outside track rows/cards) or `Shift + Right Cli
 |---|---|---|
 | `Display: UI font (auto / cui / font name)` | `auto` | Probes `HarmonyOS Sans SC`, `Noto Sans SC`, `Source Han Sans SC`, `PingFang SC`, `Microsoft YaHei UI`, `Segoe UI`; `'cui'` tracks Columns UI font; or specify any installed family name. |
 | `Lyrics: font (auto = match UI / cui / font name)` | `auto` | Independent font override for right-pane and fullscreen lyrics (`'auto'` follows UI font). |
+| `Fullscreen: renderer (auto / webview / gdi)` | `auto` | `'auto'` uses Edge WebView2 AMLL (`fullscreen-web`) when `Verdant.Chrome` + runtime are available and falls back to GDI+ cleanly; set `'gdi'` to force native GDI+ rendering. |
 | `Display: UI scale (0 = auto)` | `0` | Manual UI scale multiplier (`0.75`–`3.0`); `0` follows current Windows monitor DPI (`DPI / 96`). Stored as string to preserve fractional edits (`1.25`, `1.5`, etc.). |
 | `Display: colour mode (0 = auto, 1 = dark, 2 = light)` | `0` | `0` follows Columns UI dark/light mode live, `1` forces Dark, `2` forces Light (fullscreen remains dark over album art). |
 | `Display: language (auto / en / zh-CN)` | `auto` | `'auto'` detects Windows `HKCU\Control Panel\International\LocaleName` (`zh-*` -> `zh-CN`, else `en`). |

@@ -1,0 +1,16 @@
+{
+  "name": "polaplayer-fullscreen-web",
+  "version": "1.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "description": "Offline AMLL fullscreen UI bundle for PolaPlayer (Edge WebView2 host).",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@applemusic-like-lyrics/core": "0.7.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

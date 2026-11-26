@@ -1,0 +1,21 @@
+{
+  "name": "polaplayer-native-web",
+  "version": "1.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "description": "PolaPlayer Native UI WebView2 Frontend (Preact + TypeScript + AMLL Fullscreen)",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node tests/run.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@applemusic-like-lyrics/core": "0.7.2",
+    "preact": "^10.26.4"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.3"
+  }
+}

@@ -13,11 +13,13 @@ function albKey(h){ if(!h) return ''; var p=h.Path; if(albKeyCache.hasOwnPropert
    the panels art can affect (never the title bar, and skipping the full-window canvas clear), and
    back the interval right off while a bulk warm is still draining. */
 function artWarmRepaint(){
+  if(typeof fsMode==='boolean' && fsMode) return;
   if(artRepaintPending) return;
   artRepaintPending=true;
   var busy=(artGateQueue.length+artQueue.length+artWarmQueue.length+artInFlight)>16;
   window.SetTimeout(function(){
     artRepaintPending=false;
+    if(typeof fsMode==='boolean' && fsMode) return;
     if(!R.main||!R.navTop||!R.queue){ repaintAll(); return; }   // art can resolve before layout() has run
     repaintMain(); repaintNavAll(); repaintQueue();             // repaintMain also covers the bar
   },busy?260:60);
@@ -177,7 +179,10 @@ function getNowPlayingArt(){
         for(var rk in npArtRendered)if(npArtRendered[rk].track===old)delete npArtRendered[rk];
         npArtRenderedOrder=npArtRenderedOrder.filter(function(k){return !!npArtRendered[k];});
       }
-      repaintAll();
+      if(typeof fsBridgePushCover==='function') fsBridgePushCover();
+      if(!(typeof fsMode==='boolean' && fsMode && typeof fsBridgeIsShowing==='function' && fsBridgeIsShowing())){
+        repaintAll();
+      }
     }else if(NP)getNowPlayingArt();
   }
   try{utils.GetAlbumArtAsyncV2(0,h,0,false,false,false).then(function(res){finish(res&&res.image);},function(){finish(null);});}
@@ -232,6 +237,7 @@ var warmJob=null, WARM_SLICE=25;
 function startWarmHome(arts,pls){ warmJob={arts:arts,pls:pls,ai:0,pi:0}; warmStep(); }
 function warmStep(){
   if(!warmJob) return;
+  if(typeof fsMode==='boolean' && fsMode){ window.SetTimeout(warmStep,500); return; }
   var j=warmJob, n=0, h;
   while(n<WARM_SLICE && j.ai<j.arts.length){
     h=artistFirst(j.arts[j.ai].name,j.arts[j.ai].handle);   // NOT artistCover: choosing a cover is
